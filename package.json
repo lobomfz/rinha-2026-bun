@@ -1,0 +1,11 @@
+{
+  "name": "rinha-v2",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@typescript/native-preview": "^7.0.0-dev.20260421.2",
+    "oxfmt": "^0.48.0"
+  }
+}
