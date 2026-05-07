@@ -87,7 +87,7 @@ export const Vectorize = {
     out[11] = payload.customer.known_merchants.includes(payload.merchant.id)
       ? 0
       : 1
-    out[12] = MCC_RISK.get(payload.merchant.mcc) ?? 0.5
+    out[12] = MCC_RISK.get(payload.merchant.mcc)! || 0.5
     out[13] = Vectorize.clamp01(
       payload.merchant.avg_amount / NORMALIZATION.max_merchant_avg_amount
     )

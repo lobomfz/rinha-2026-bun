@@ -1,11 +1,6 @@
 {
   "$schema": "./node_modules/knip/schema.json",
-  "entry": ["scripts/*.ts"],
-  "project": ["src/**/*.ts", "scripts/*.ts"],
-  "ignoreDependencies": [
-    "@typescript/native-preview",
-    "oxfmt",
-    "oxlint",
-    "oxlint-tsgolint"
-  ]
+  "entry": ["src/index.ts", "scripts/*.ts", "bench/**/*.ts"],
+  "project": ["src/**/*.ts", "scripts/*.ts", "bench/**/*.ts"],
+  "ignoreDependencies": ["@typescript/native-preview", "oxfmt", "oxlint-tsgolint"]
 }

@@ -21,11 +21,11 @@ const labels = new Uint8Array(refs.length)
 let fraudCount = 0
 
 for (let i = 0; i < refs.length; i++) {
-  const ref = refs[i]!
+  const ref = refs[i]
   const offset = i * CONSTANTS.DIMS
 
   for (let dim = 0; dim < CONSTANTS.DIMS; dim++) {
-    vectors[offset + dim] = Math.round(ref.vector[dim]! * CONSTANTS.SCALE)
+    vectors[offset + dim] = Math.round(ref.vector[dim] * CONSTANTS.SCALE)
   }
 
   if (ref.label === 'fraud') {

@@ -3,16 +3,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bun src/index.ts",
     "check": "lobomfz-check"
   },
   "devDependencies": {
-    "@lobomfz/check": "^0.1.10",
+    "@lobomfz/check": "^0.1.11",
     "@types/bun": "latest",
     "@typescript/native-preview": "^7.0.0-dev.20260507.1",
     "knip": "^6.12.1",
     "oxfmt": "^0.48.0",
-    "oxlint": "^1.63.0",
     "oxlint-tsgolint": "^0.22.1"
   }
 }

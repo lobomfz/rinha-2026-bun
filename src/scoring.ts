@@ -9,7 +9,7 @@ const query = new Int16Array(CONSTANTS.DIMS)
 export const Scoring = {
   quantize(src: Float32Array, out: Int16Array): void {
     for (let i = 0; i < CONSTANTS.DIMS; i++) {
-      out[i] = Math.round(src[i]! * CONSTANTS.SCALE)
+      out[i] = Math.round(src[i] * CONSTANTS.SCALE)
     }
   },
 

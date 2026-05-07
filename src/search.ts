@@ -21,7 +21,7 @@ export const Search = {
       let distance = 0
 
       for (let dim = 0; dim < CONSTANTS.DIMS; dim++) {
-        const diff = query[dim]! - vectors[base + dim]!
+        const diff = query[dim] - vectors[base + dim]
 
         distance += diff * diff
 
@@ -36,7 +36,7 @@ export const Search = {
 
       let slot = CONSTANTS.TOP_K - 1
 
-      while (slot > 0 && topDistances[slot - 1]! > distance) {
+      while (slot > 0 && topDistances[slot - 1] > distance) {
         topDistances[slot] = topDistances[slot - 1]!
         topLabels[slot] = topLabels[slot - 1]!
         slot--
@@ -50,7 +50,7 @@ export const Search = {
     let fraudCount = 0
 
     for (let k = 0; k < CONSTANTS.TOP_K; k++) {
-      fraudCount += topLabels[k]!
+      fraudCount += topLabels[k]
     }
 
     return fraudCount

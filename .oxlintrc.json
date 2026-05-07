@@ -1,6 +1,9 @@
 {
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
   "extends": ["./node_modules/@lobomfz/check/.oxlintrc.json"],
+  "rules": {
+    "lobomfz/no-nullish-coalescing": "off"
+  },
+  "ignorePatterns": ["bench/official"],
   "overrides": [
     {
       "files": ["scripts/**/*.ts"]
