@@ -16,22 +16,20 @@ try {
 
   console.log('k6 running bench/official/test/test.js')
 
-  const exitCode = await Bun.spawn(['k6', 'run', 'test/test.js'], {
+  const k6 = await Bun.spawn(['k6', 'run', 'test/test.js'], {
     cwd: 'bench/official',
     stdout: 'ignore',
     stderr: 'ignore',
   }).exited
 
-  const wroteResult = await Bun.file(resultPath).exists()
-
-  if (!wroteResult) {
-    process.exit(exitCode || 1)
+  if (!(await Bun.file(resultPath).exists())) {
+    throw new Error('k6 did not write results.json')
   }
 
   console.log(JSON.stringify(await Bun.file(resultPath).json(), null, 2))
 
-  if (exitCode !== 0) {
-    process.exit(exitCode)
+  if (k6 !== 0) {
+    process.exitCode = k6
   }
 } finally {
   await BenchServer.stop(server)

@@ -1,6 +1,8 @@
 export const CONSTANTS = {
   DIMS: 14,
   TOP_K: 5,
+  REGION_COUNT: 2048,
+  REGION_PROBE: 2048,
   SCALE: 10000,
   PORT: 9999,
   DATA_DIR: 'out',

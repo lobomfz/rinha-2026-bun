@@ -20,7 +20,7 @@ export const K6 = {
 
     console.log(`k6 running ${script}`)
 
-    const k6 = await Bun.spawn(
+    const exitCode = await Bun.spawn(
       ['k6', 'run', '--quiet', '--summary-export', latestPath, script],
       {
         stdout: 'ignore',
@@ -30,14 +30,12 @@ export const K6 = {
 
     const wroteSummary = await Bun.file(latestPath).exists()
 
-    if (!wroteSummary) {
-      process.exit(k6)
+    if (wroteSummary) {
+      await rename(latestPath, resultPath)
+
+      console.log(`summary saved ${resultPath}`)
     }
 
-    await rename(latestPath, resultPath)
-
-    console.log(`summary saved ${resultPath}`)
-
-    return { exitCode: k6, resultPath }
+    return { exitCode, resultPath, wroteSummary }
   },
 }

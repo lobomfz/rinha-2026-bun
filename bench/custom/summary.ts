@@ -15,7 +15,7 @@ const counters = [
 
 type ScoreCounts = Record<(typeof counters)[number][0], number>
 
-interface ScoreResult {
+export interface ScoreResult {
   counts: ScoreCounts
   latency: Metric
   p99: number
