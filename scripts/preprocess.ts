@@ -1,24 +1,11 @@
 import { mkdir } from 'node:fs/promises'
 import { gunzipSync } from 'node:zlib'
 import { CONSTANTS, MCC_RISK, NORMALIZATION } from '@Config/constants'
+import { KMeans } from './kmeans'
 
 type Reference = {
   vector: number[]
   label: 'legit' | 'fraud'
-}
-
-function bucket(value: number, parts: number) {
-  const scaled = Math.floor((value * parts) / CONSTANTS.SCALE)
-
-  if (scaled < 0) {
-    return 0
-  }
-
-  if (scaled >= parts) {
-    return parts - 1
-  }
-
-  return scaled
 }
 
 const startedAt = Bun.nanoseconds()
@@ -31,9 +18,6 @@ const refs = JSON.parse(
 
 const vectors = new Int16Array(refs.length * CONSTANTS.DIMS)
 const labels = new Uint8Array(refs.length)
-const regions = new Uint16Array(refs.length)
-const regionCounts = new Uint32Array(CONSTANTS.REGION_COUNT)
-const centroidSums = new Float64Array(CONSTANTS.REGION_COUNT * CONSTANTS.DIMS)
 
 let fraudCount = 0
 
@@ -45,62 +29,64 @@ for (let i = 0; i < refs.length; i++) {
     vectors[offset + dim] = Math.round(ref.vector[dim] * CONSTANTS.SCALE)
   }
 
-  const amount = bucket(vectors[offset], 8)
-  const installments = bucket(vectors[offset + 1], 4)
-  const kmFromHome = bucket(vectors[offset + 7], 4)
-  const txCount = bucket(vectors[offset + 8], 4)
-  const merchantRisk = bucket(vectors[offset + 12], 4)
-  const region =
-    (((amount * 4 + installments) * 4 + kmFromHome) * 4 + txCount) * 4 +
-    merchantRisk
-
-  regions[i] = region
-  regionCounts[region]++
-
-  const centroidOffset = region * CONSTANTS.DIMS
-
-  for (let dim = 0; dim < CONSTANTS.DIMS; dim++) {
-    centroidSums[centroidOffset + dim] += vectors[offset + dim]
-  }
-
   if (ref.label === 'fraud') {
     labels[i] = 1
     fraudCount++
   }
 }
 
-const regionOffsets = new Uint32Array(CONSTANTS.REGION_COUNT + 1)
+console.log(
+  `loaded ${refs.length} vectors, fraud=${fraudCount}, k=${CONSTANTS.FINE_COUNT}`
+)
 
-for (let region = 0; region < CONSTANTS.REGION_COUNT; region++) {
-  regionOffsets[region + 1] = regionOffsets[region] + regionCounts[region]
+const centroidFloats = KMeans.train(vectors)
+const assignments = KMeans.assign(vectors, centroidFloats)
+const fineCounts = new Uint32Array(CONSTANTS.FINE_COUNT)
+const centroidSums = new Float64Array(CONSTANTS.FINE_COUNT * CONSTANTS.DIMS)
+
+for (let i = 0; i < assignments.length; i++) {
+  const fine = assignments[i]
+  const src = i * CONSTANTS.DIMS
+  const dst = fine * CONSTANTS.DIMS
+
+  fineCounts[fine]++
+
+  for (let dim = 0; dim < CONSTANTS.DIMS; dim++) {
+    centroidSums[dst + dim] += vectors[src + dim]
+  }
 }
 
-const regionCentroids = new Int16Array(CONSTANTS.REGION_COUNT * CONSTANTS.DIMS)
-
-for (let region = 0; region < CONSTANTS.REGION_COUNT; region++) {
-  const count = regionCounts[region]
-  const offset = region * CONSTANTS.DIMS
+for (let fine = 0; fine < CONSTANTS.FINE_COUNT; fine++) {
+  const count = fineCounts[fine]
+  const offset = fine * CONSTANTS.DIMS
 
   if (count === 0) {
-    for (let dim = 0; dim < CONSTANTS.DIMS; dim++) {
-      regionCentroids[offset + dim] = 32767
-    }
-
     continue
   }
 
   for (let dim = 0; dim < CONSTANTS.DIMS; dim++) {
-    regionCentroids[offset + dim] = Math.round(centroidSums[offset + dim] / count)
+    centroidFloats[offset + dim] = centroidSums[offset + dim] / count
   }
 }
 
+const fineOffsets = new Uint32Array(CONSTANTS.FINE_COUNT + 1)
+
+for (let fine = 0; fine < CONSTANTS.FINE_COUNT; fine++) {
+  fineOffsets[fine + 1] = fineOffsets[fine] + fineCounts[fine]
+}
+
+const fineCentroids = new Int16Array(CONSTANTS.FINE_COUNT * CONSTANTS.DIMS)
 const orderedVectors = new Int16Array(vectors.length)
 const orderedLabels = new Uint8Array(labels.length)
-const cursors = new Uint32Array(regionOffsets)
+const cursors = new Uint32Array(fineOffsets)
+
+for (let i = 0; i < fineCentroids.length; i++) {
+  fineCentroids[i] = Math.round(centroidFloats[i])
+}
 
 for (let i = 0; i < refs.length; i++) {
-  const region = regions[i]
-  const dst = cursors[region]++
+  const fine = assignments[i]
+  const dst = cursors[fine]++
   const srcOffset = i * CONSTANTS.DIMS
   const dstOffset = dst * CONSTANTS.DIMS
 
@@ -115,8 +101,8 @@ await mkdir(CONSTANTS.DATA_DIR, { recursive: true })
 
 await Bun.write(`${CONSTANTS.DATA_DIR}/vectors.bin`, orderedVectors)
 await Bun.write(`${CONSTANTS.DATA_DIR}/labels.bin`, orderedLabels)
-await Bun.write(`${CONSTANTS.DATA_DIR}/region_centroids.bin`, regionCentroids)
-await Bun.write(`${CONSTANTS.DATA_DIR}/region_offsets.bin`, regionOffsets)
+await Bun.write(`${CONSTANTS.DATA_DIR}/fine_centroids.bin`, fineCentroids)
+await Bun.write(`${CONSTANTS.DATA_DIR}/fine_offsets.bin`, fineOffsets)
 await Bun.write(
   `${CONSTANTS.DATA_DIR}/normalization.json`,
   JSON.stringify(NORMALIZATION)
@@ -129,5 +115,5 @@ await Bun.write(
 const seconds = ((Bun.nanoseconds() - startedAt) / 1e9).toFixed(1)
 
 console.log(
-  `wrote ${refs.length} vectors, fraud=${fraudCount}, regions=${CONSTANTS.REGION_COUNT}, dir=${CONSTANTS.DATA_DIR}, ${seconds}s`
+  `wrote ${refs.length} vectors, fraud=${fraudCount}, fine=${CONSTANTS.FINE_COUNT}, probe=${CONSTANTS.FINE_PROBE}, dir=${CONSTANTS.DATA_DIR}, ${seconds}s`
 )

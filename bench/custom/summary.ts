@@ -10,10 +10,11 @@ const counters = [
   ['falseNegatives', 'false_negatives'],
   ['httpErrors', 'http_errors'],
   ['scoreMismatches', 'score_mismatches'],
-  ['droppedIterations', 'dropped_iterations'],
 ] as const
 
-type ScoreCounts = Record<(typeof counters)[number][0], number>
+interface ScoreCounts extends Record<(typeof counters)[number][0], number> {
+  droppedIterations: number
+}
 
 export interface ScoreResult {
   counts: ScoreCounts
@@ -45,6 +46,8 @@ export const ScoreSummary = {
     for (const [name, metric] of counters) {
       counts[name] = metrics[metric].count!
     }
+
+    counts.droppedIterations = metrics.dropped_iterations?.count ?? 0
 
     return counts
   },

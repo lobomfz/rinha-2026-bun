@@ -1,62 +1,57 @@
-import {
-  labels,
-  regionCentroids,
-  regionOffsets,
-  vectors,
-} from '@Config/artifacts'
+import { fineCentroids, fineOffsets, labels, vectors } from '@Config/artifacts'
 import { CONSTANTS } from '@Config/constants'
 
-const regionLimit = Math.min(CONSTANTS.REGION_PROBE, CONSTANTS.REGION_COUNT)
-const regionDistances = new Float64Array(regionLimit)
-const regionOrder = new Uint16Array(regionLimit)
+const fineLimit = Math.min(CONSTANTS.FINE_PROBE, CONSTANTS.FINE_COUNT)
+const fineDistances = new Float64Array(fineLimit)
+const fineOrder = new Uint16Array(fineLimit)
 const topDistances = new Float64Array(CONSTANTS.TOP_K)
 const topLabels = new Uint8Array(CONSTANTS.TOP_K)
 
 export const Search = {
   size: labels.length,
 
-  insertSelectedRegion(distance: number, region: number, slot: number) {
-    while (slot > 0 && regionDistances[slot - 1] > distance) {
-      regionDistances[slot] = regionDistances[slot - 1]
-      regionOrder[slot] = regionOrder[slot - 1]
+  insertSelectedFine(distance: number, fine: number, slot: number) {
+    while (slot > 0 && fineDistances[slot - 1] > distance) {
+      fineDistances[slot] = fineDistances[slot - 1]
+      fineOrder[slot] = fineOrder[slot - 1]
       slot--
     }
 
-    regionDistances[slot] = distance
-    regionOrder[slot] = region
+    fineDistances[slot] = distance
+    fineOrder[slot] = fine
   },
 
-  selectRegions(query: Int16Array) {
+  selectFine(query: Int16Array) {
     let selected = 0
 
-    for (let region = 0; region < CONSTANTS.REGION_COUNT; region++) {
-      const offset = region * CONSTANTS.DIMS
+    for (let fine = 0; fine < CONSTANTS.FINE_COUNT; fine++) {
+      const offset = fine * CONSTANTS.DIMS
       let distance = 0
 
       for (let dim = 0; dim < CONSTANTS.DIMS; dim++) {
-        const diff = query[dim] - regionCentroids[offset + dim]
+        const diff = query[dim] - fineCentroids[offset + dim]
 
         distance += diff * diff
       }
 
-      if (selected < regionLimit) {
+      if (selected < fineLimit) {
         const slot = selected
         selected++
-        Search.insertSelectedRegion(distance, region, slot)
+        Search.insertSelectedFine(distance, fine, slot)
         continue
       }
 
-      if (distance >= regionDistances[regionLimit - 1]) {
+      if (distance >= fineDistances[fineLimit - 1]) {
         continue
       }
 
-      Search.insertSelectedRegion(distance, region, regionLimit - 1)
+      Search.insertSelectedFine(distance, fine, fineLimit - 1)
     }
 
     return selected
   },
 
-  scanRegion(query: Int16Array, start: number, end: number) {
+  scanFine(query: Int16Array, start: number, end: number) {
     let worstTop = topDistances[CONSTANTS.TOP_K - 1]
 
     for (let i = start; i < end; i++) {
@@ -97,18 +92,18 @@ export const Search = {
       topLabels[k] = 0
     }
 
-    const selected = Search.selectRegions(query)
+    const selected = Search.selectFine(query)
 
     for (let i = 0; i < selected; i++) {
-      const region = regionOrder[i]
-      const start = regionOffsets[region]
-      const end = regionOffsets[region + 1]
+      const fine = fineOrder[i]
+      const start = fineOffsets[fine]
+      const end = fineOffsets[fine + 1]
 
       if (start === end) {
         continue
       }
 
-      Search.scanRegion(query, start, end)
+      Search.scanFine(query, start, end)
     }
 
     let fraudCount = 0
