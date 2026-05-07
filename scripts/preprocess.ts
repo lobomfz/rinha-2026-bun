@@ -76,9 +76,19 @@ for (let fine = 0; fine < CONSTANTS.FINE_COUNT; fine++) {
 }
 
 const fineCentroids = new Int16Array(CONSTANTS.FINE_COUNT * CONSTANTS.DIMS)
+const fineBboxes = new Int16Array(CONSTANTS.FINE_COUNT * CONSTANTS.DIMS * 2)
 const orderedVectors = new Int16Array(vectors.length)
 const orderedLabels = new Uint8Array(labels.length)
 const cursors = new Uint32Array(fineOffsets)
+
+for (let fine = 0; fine < CONSTANTS.FINE_COUNT; fine++) {
+  const offset = fine * CONSTANTS.DIMS * 2
+
+  for (let dim = 0; dim < CONSTANTS.DIMS; dim++) {
+    fineBboxes[offset + dim * 2] = 32767
+    fineBboxes[offset + dim * 2 + 1] = -32768
+  }
+}
 
 for (let i = 0; i < fineCentroids.length; i++) {
   fineCentroids[i] = Math.round(centroidFloats[i])
@@ -89,9 +99,22 @@ for (let i = 0; i < refs.length; i++) {
   const dst = cursors[fine]++
   const srcOffset = i * CONSTANTS.DIMS
   const dstOffset = dst * CONSTANTS.DIMS
+  const bboxOffset = fine * CONSTANTS.DIMS * 2
 
   for (let dim = 0; dim < CONSTANTS.DIMS; dim++) {
-    orderedVectors[dstOffset + dim] = vectors[srcOffset + dim]
+    const value = vectors[srcOffset + dim]
+    const minOffset = bboxOffset + dim * 2
+    const maxOffset = minOffset + 1
+
+    orderedVectors[dstOffset + dim] = value
+
+    if (value < fineBboxes[minOffset]) {
+      fineBboxes[minOffset] = value
+    }
+
+    if (value > fineBboxes[maxOffset]) {
+      fineBboxes[maxOffset] = value
+    }
   }
 
   orderedLabels[dst] = labels[i]
@@ -102,6 +125,7 @@ await mkdir(CONSTANTS.DATA_DIR, { recursive: true })
 await Bun.write(`${CONSTANTS.DATA_DIR}/vectors.bin`, orderedVectors)
 await Bun.write(`${CONSTANTS.DATA_DIR}/labels.bin`, orderedLabels)
 await Bun.write(`${CONSTANTS.DATA_DIR}/fine_centroids.bin`, fineCentroids)
+await Bun.write(`${CONSTANTS.DATA_DIR}/fine_bboxes.bin`, fineBboxes)
 await Bun.write(`${CONSTANTS.DATA_DIR}/fine_offsets.bin`, fineOffsets)
 await Bun.write(
   `${CONSTANTS.DATA_DIR}/normalization.json`,

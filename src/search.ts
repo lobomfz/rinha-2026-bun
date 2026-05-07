@@ -1,4 +1,10 @@
-import { fineCentroids, fineOffsets, labels, vectors } from '@Config/artifacts'
+import {
+  fineBboxes,
+  fineCentroids,
+  fineOffsets,
+  labels,
+  vectors,
+} from '@Config/artifacts'
 import { CONSTANTS } from '@Config/constants'
 
 const fineLimit = Math.min(CONSTANTS.FINE_PROBE, CONSTANTS.FINE_COUNT)
@@ -51,6 +57,32 @@ export const Search = {
     return selected
   },
 
+  bboxLowerBound(query: Int16Array, fine: number) {
+    const offset = fine * CONSTANTS.DIMS * 2
+    let distance = 0
+
+    for (let dim = 0; dim < CONSTANTS.DIMS; dim++) {
+      const value = query[dim]
+      const min = fineBboxes[offset + dim * 2]
+      const max = fineBboxes[offset + dim * 2 + 1]
+
+      if (value < min) {
+        const diff = min - value
+
+        distance += diff * diff
+        continue
+      }
+
+      if (value > max) {
+        const diff = value - max
+
+        distance += diff * diff
+      }
+    }
+
+    return distance
+  },
+
   scanFine(query: Int16Array, start: number, end: number) {
     let worstTop = topDistances[CONSTANTS.TOP_K - 1]
 
@@ -100,6 +132,10 @@ export const Search = {
       const end = fineOffsets[fine + 1]
 
       if (start === end) {
+        continue
+      }
+
+      if (Search.bboxLowerBound(query, fine) >= topDistances[CONSTANTS.TOP_K - 1]) {
         continue
       }
 
