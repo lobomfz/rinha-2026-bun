@@ -3,6 +3,15 @@ import { Scoring } from './scoring'
 import { Search } from './search'
 import type { Payload } from './types'
 
+const responses = [
+  Response.json({ approved: true, fraud_score: 0 }),
+  Response.json({ approved: true, fraud_score: 0.2 }),
+  Response.json({ approved: true, fraud_score: 0.4 }),
+  Response.json({ approved: false, fraud_score: 0.6 }),
+  Response.json({ approved: false, fraud_score: 0.8 }),
+  Response.json({ approved: false, fraud_score: 1 }),
+]
+
 const server = Bun.serve({
   port: CONSTANTS.PORT,
   routes: {
@@ -13,10 +22,7 @@ const server = Bun.serve({
 
         const fraudCount = Scoring.fraudCount(payload)
 
-        return Response.json({
-          approved: fraudCount < 3,
-          fraud_score: fraudCount / CONSTANTS.TOP_K,
-        })
+        return responses[fraudCount]
       },
     },
   },
