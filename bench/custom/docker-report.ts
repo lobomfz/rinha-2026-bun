@@ -39,7 +39,6 @@ await rm(resultPath, { force: true })
 
 console.log(
   JSON.stringify({
-    ok: exitCode === 0,
     at: new Date().toISOString(),
     p50: result.latency['p(50)'],
     p95: result.latency['p(95)'],
