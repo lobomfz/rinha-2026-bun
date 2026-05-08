@@ -1,6 +1,6 @@
-import fixtures from '../data/test-data.json'
-import { bench, run } from 'mitata'
 import { CONSTANTS } from '@Config/constants'
+import { bench, run } from 'mitata'
+import fixtures from '../data/test-data.json'
 import { Scoring } from '../src/scoring'
 import { Search } from '../src/search'
 import type { Payload } from '../src/types'

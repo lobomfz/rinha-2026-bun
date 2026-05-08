@@ -6,6 +6,7 @@ import {
   vectors,
 } from '@Config/artifacts'
 import { CONSTANTS } from '@Config/constants'
+import { measure } from './profiling'
 
 const fineLimit = Math.min(CONSTANTS.FINE_PROBE, CONSTANTS.FINE_COUNT)
 const fineDistances = new Float64Array(fineLimit)
@@ -105,6 +106,7 @@ export const Search = {
 
     for (let i = start; i < end; i++) {
       const base = i * CONSTANTS.DIMS
+
       let distance = 0
 
       for (let dim = 0; dim < CONSTANTS.DIMS; dim++) {
@@ -135,62 +137,14 @@ export const Search = {
     }
   },
 
-  profile(query: Int16Array) {
-    Search.resetTop()
-
-    let bboxNs = 0
-    let scanNs = 0
-    let scannedBuckets = 0
-    let skippedBuckets = 0
-    let scannedVectors = 0
-
-    const selectStartedAt = Bun.nanoseconds()
-    const selectedBuckets = Search.selectFine(query)
-    const selectFineNs = Bun.nanoseconds() - selectStartedAt
-
-    for (let i = 0; i < selectedBuckets; i++) {
-      const fine = fineOrder[i]
-      const start = fineOffsets[fine]
-      const end = fineOffsets[fine + 1]
-
-      if (start === end) {
-        skippedBuckets++
-        continue
-      }
-
-      const bboxStartedAt = Bun.nanoseconds()
-      const lowerBound = Search.bboxLowerBound(query, fine)
-      bboxNs += Bun.nanoseconds() - bboxStartedAt
-
-      if (lowerBound >= topDistances[CONSTANTS.TOP_K - 1]) {
-        skippedBuckets++
-        continue
-      }
-
-      const scanStartedAt = Bun.nanoseconds()
-      Search.scanFine(query, start, end)
-      scanNs += Bun.nanoseconds() - scanStartedAt
-
-      scannedBuckets++
-      scannedVectors += end - start
-    }
-
-    return {
-      fraudCount: Search.fraudCount(),
-      selectFineNs,
-      bboxNs,
-      scanNs,
-      selectedBuckets,
-      scannedBuckets,
-      skippedBuckets,
-      scannedVectors,
-    }
-  },
-
   knn(query: Int16Array) {
     Search.resetTop()
 
-    const selected = Search.selectFine(query)
+    const selected = measure(
+      'selectFine',
+      () => Search.selectFine(query),
+      'selectedBuckets'
+    )
 
     for (let i = 0; i < selected; i++) {
       const fine = fineOrder[i]
@@ -198,14 +152,22 @@ export const Search = {
       const end = fineOffsets[fine + 1]
 
       if (start === end) {
+        measure.count('skippedBuckets')
         continue
       }
 
-      if (Search.bboxLowerBound(query, fine) >= topDistances[CONSTANTS.TOP_K - 1]) {
+      const lowerBound = measure('bbox', () =>
+        Search.bboxLowerBound(query, fine)
+      )
+
+      if (lowerBound >= topDistances[CONSTANTS.TOP_K - 1]) {
+        measure.count('skippedBuckets')
         continue
       }
 
-      Search.scanFine(query, start, end)
+      measure('scan', () => Search.scanFine(query, start, end))
+      measure.count('scannedBuckets')
+      measure.count('scannedVectors', end - start)
     }
 
     return Search.fraudCount()

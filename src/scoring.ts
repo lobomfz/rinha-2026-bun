@@ -1,4 +1,5 @@
 import { CONSTANTS } from '@Config/constants'
+import { measure } from './profiling'
 import { Search } from './search'
 import type { Payload } from './types'
 import { Vectorize } from './vectorize'
@@ -14,10 +15,15 @@ export const Scoring = {
   },
 
   fraudCount(payload: Payload) {
-    Vectorize.transform(payload, vector)
+    measure.begin()
 
-    this.quantize(vector, query)
+    measure('vectorize', () => Vectorize.transform(payload, vector))
+    measure('quantize', () => this.quantize(vector, query))
 
-    return Search.knn(query)
+    const fraudCount = measure('search', () => Search.knn(query), 'fraudCount')
+
+    measure.finish()
+
+    return fraudCount
   },
 }

@@ -2,7 +2,8 @@
 node_modules
 data
 bench
-scripts
+scripts/*
+!scripts/build.ts
 ignored
 *.md
 .oxfmtrc.json

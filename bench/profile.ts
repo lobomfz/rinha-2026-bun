@@ -1,64 +1,62 @@
-import fixtures from '../data/test-data.json'
 import { CONSTANTS } from '@Config/constants'
+import fixtures from '../data/test-data.json'
+import { measure } from '../src/profiling'
 import { Scoring } from '../src/scoring'
-import { Search } from '../src/search'
-import type { Payload } from '../src/types'
-import { Vectorize } from '../src/vectorize'
 
-type Entry = {
-  request: Payload
-  expected_approved: boolean
-  expected_fraud_score: number
+const phaseNames = [
+  'total',
+  'vectorize',
+  'quantize',
+  'search',
+  'selectFine',
+  'bbox',
+  'scan',
+] as const
+
+const counterNames = [
+  'selectedBuckets',
+  'scannedBuckets',
+  'skippedBuckets',
+  'scannedVectors',
+] as const
+
+type PhaseName = (typeof phaseNames)[number]
+type CounterName = (typeof counterNames)[number]
+type Phase = Record<PhaseName, number>
+type Counter = Record<CounterName, number>
+
+const limit = Number(Bun.argv[2] ?? fixtures.entries.length)
+const entries = fixtures.entries.slice(0, limit)
+
+const phases: Record<PhaseName, number[]> = {
+  total: [],
+  vectorize: [],
+  quantize: [],
+  search: [],
+  selectFine: [],
+  bbox: [],
+  scan: [],
 }
 
-type Fixtures = { entries: Entry[] }
-
-type Stats = {
-  mean: number
-  p50: number
-  p95: number
-  p99: number
-  max: number
+const counters: Record<CounterName, number[]> = {
+  selectedBuckets: [],
+  scannedBuckets: [],
+  skippedBuckets: [],
+  scannedVectors: [],
 }
 
-const vector = new Float32Array(CONSTANTS.DIMS)
-const query = new Int16Array(CONSTANTS.DIMS)
-const limit = Number(Bun.argv[2] ?? (fixtures as Fixtures).entries.length)
-const entries = (fixtures as Fixtures).entries.slice(0, limit)
-
-const total = [] as number[]
-const vectorize = [] as number[]
-const quantize = [] as number[]
-const selectFine = [] as number[]
-const bbox = [] as number[]
-const scan = [] as number[]
-const search = [] as number[]
-const selectedBuckets = [] as number[]
-const scannedBuckets = [] as number[]
-const skippedBuckets = [] as number[]
-const scannedVectors = [] as number[]
-const slowest = [] as {
+const slowest: ({
   id: string
-  total: number
-  vectorize: number
-  quantize: number
-  search: number
-  selectFine: number
-  bbox: number
-  scan: number
-  selectedBuckets: number
-  scannedBuckets: number
-  skippedBuckets: number
-  scannedVectors: number
   fraudCount: number
   expectedFraudCount: number
-}[]
+} & Phase &
+  Counter)[] = []
 
-function milliseconds(ns: number): number {
+function ms(ns: number) {
   return ns / 1e6
 }
 
-function summarize(values: number[]): Stats {
+function summarize(values: number[]) {
   const sorted = [...values].sort((a, b) => a - b)
   let sum = 0
 
@@ -76,52 +74,35 @@ function summarize(values: number[]): Stats {
 }
 
 for (const entry of entries) {
-  const totalStartedAt = Bun.nanoseconds()
+  const fraudCount = Scoring.fraudCount(entry.request)
 
-  const vectorizeStartedAt = Bun.nanoseconds()
-  Vectorize.transform(entry.request, vector)
-  const vectorizeMs = milliseconds(Bun.nanoseconds() - vectorizeStartedAt)
+  const profile = measure.snapshot()
 
-  const quantizeStartedAt = Bun.nanoseconds()
-  Scoring.quantize(vector, query)
-  const quantizeMs = milliseconds(Bun.nanoseconds() - quantizeStartedAt)
+  const phase = Object.fromEntries(
+    phaseNames.map((name) => [name, ms(profile[`${name}Ns`])])
+  ) as Phase
 
-  const searchStartedAt = Bun.nanoseconds()
-  const profile = Search.profile(query)
-  const searchMs = milliseconds(Bun.nanoseconds() - searchStartedAt)
-  const totalMs = milliseconds(Bun.nanoseconds() - totalStartedAt)
+  const counter = Object.fromEntries(
+    counterNames.map((name) => [name, profile[name]])
+  ) as Counter
 
-  const selectFineMs = milliseconds(profile.selectFineNs)
-  const bboxMs = milliseconds(profile.bboxNs)
-  const scanMs = milliseconds(profile.scanNs)
-  const expectedFraudCount = Math.round(entry.expected_fraud_score * CONSTANTS.TOP_K)
+  const expectedFraudCount = Math.round(
+    entry.expected_fraud_score * CONSTANTS.TOP_K
+  )
 
-  total.push(totalMs)
-  vectorize.push(vectorizeMs)
-  quantize.push(quantizeMs)
-  search.push(searchMs)
-  selectFine.push(selectFineMs)
-  bbox.push(bboxMs)
-  scan.push(scanMs)
-  selectedBuckets.push(profile.selectedBuckets)
-  scannedBuckets.push(profile.scannedBuckets)
-  skippedBuckets.push(profile.skippedBuckets)
-  scannedVectors.push(profile.scannedVectors)
+  for (const name of phaseNames) {
+    phases[name].push(phase[name])
+  }
+
+  for (const name of counterNames) {
+    counters[name].push(counter[name])
+  }
 
   slowest.push({
     id: entry.request.id,
-    total: totalMs,
-    vectorize: vectorizeMs,
-    quantize: quantizeMs,
-    search: searchMs,
-    selectFine: selectFineMs,
-    bbox: bboxMs,
-    scan: scanMs,
-    selectedBuckets: profile.selectedBuckets,
-    scannedBuckets: profile.scannedBuckets,
-    skippedBuckets: profile.skippedBuckets,
-    scannedVectors: profile.scannedVectors,
-    fraudCount: profile.fraudCount,
+    ...phase,
+    ...counter,
+    fraudCount,
     expectedFraudCount,
   })
 }
@@ -131,21 +112,12 @@ slowest.sort((a, b) => b.total - a.total)
 console.log(
   JSON.stringify({
     count: entries.length,
-    phases: {
-      total: summarize(total),
-      vectorize: summarize(vectorize),
-      quantize: summarize(quantize),
-      search: summarize(search),
-      selectFine: summarize(selectFine),
-      bbox: summarize(bbox),
-      scan: summarize(scan),
-    },
-    counters: {
-      selectedBuckets: summarize(selectedBuckets),
-      scannedBuckets: summarize(scannedBuckets),
-      skippedBuckets: summarize(skippedBuckets),
-      scannedVectors: summarize(scannedVectors),
-    },
+    phases: Object.fromEntries(
+      phaseNames.map((name) => [name, summarize(phases[name])])
+    ),
+    counters: Object.fromEntries(
+      counterNames.map((name) => [name, summarize(counters[name])])
+    ),
     slowest: slowest.slice(0, 20),
   })
 )

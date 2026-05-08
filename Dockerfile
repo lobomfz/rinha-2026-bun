@@ -2,14 +2,8 @@ FROM oven/bun:1.3.13 AS builder
 WORKDIR /app
 COPY package.json bun.lock tsconfig.json ./
 COPY src ./src
-RUN bun build src/index.ts \
-  --compile \
-  --bytecode \
-  --target=bun \
-  --format=esm \
-  --production \
-  --sourcemap=none \
-  --outfile=server
+COPY scripts/build.ts ./scripts/build.ts
+RUN bun scripts/build.ts
 
 FROM debian:bookworm-slim
 WORKDIR /app
