@@ -11,7 +11,6 @@ import { CONSTANTS } from '@Config/constants'
 import { measure } from './profiling'
 
 const fineLimit = Math.min(CONSTANTS.FINE_PROBE, CONSTANTS.FINE_COUNT)
-const fineAllDistances = new Float64Array(CONSTANTS.FINE_COUNT)
 const fineDistances = new Float64Array(fineLimit)
 const fineOrder = new Uint16Array(fineLimit)
 const lowerBounds = new Float64Array(fineLimit)
@@ -60,15 +59,82 @@ export const Search = {
     return fraudCount
   },
 
-  insertSelectedFine(distance: number, fine: number, slot: number) {
-    while (slot > 0 && fineDistances[slot - 1] > distance) {
-      fineDistances[slot] = fineDistances[slot - 1]
-      fineOrder[slot] = fineOrder[slot - 1]
-      slot--
-    }
+  heapSiftDown(end: number) {
+    let i = 0
 
-    fineDistances[slot] = distance
-    fineOrder[slot] = fine
+    while (true) {
+      const left = 2 * i + 1
+
+      if (left >= end) {
+        break
+      }
+
+      let largest = i
+
+      if (fineDistances[left] > fineDistances[largest]) {
+        largest = left
+      }
+
+      const right = left + 1
+
+      if (right < end && fineDistances[right] > fineDistances[largest]) {
+        largest = right
+      }
+
+      if (largest === i) {
+        break
+      }
+
+      const td = fineDistances[i]
+      fineDistances[i] = fineDistances[largest]
+      fineDistances[largest] = td
+
+      const to = fineOrder[i]
+      fineOrder[i] = fineOrder[largest]
+      fineOrder[largest] = to
+
+      i = largest
+    }
+  },
+
+  heapBuild() {
+    for (let start = (fineLimit >> 1) - 1; start >= 0; start--) {
+      let i = start
+
+      while (true) {
+        const left = 2 * i + 1
+
+        if (left >= fineLimit) {
+          break
+        }
+
+        let largest = i
+
+        if (fineDistances[left] > fineDistances[largest]) {
+          largest = left
+        }
+
+        const right = left + 1
+
+        if (right < fineLimit && fineDistances[right] > fineDistances[largest]) {
+          largest = right
+        }
+
+        if (largest === i) {
+          break
+        }
+
+        const td = fineDistances[i]
+        fineDistances[i] = fineDistances[largest]
+        fineDistances[largest] = td
+
+        const to = fineOrder[i]
+        fineOrder[i] = fineOrder[largest]
+        fineOrder[largest] = to
+
+        i = largest
+      }
+    }
   },
 
   selectFine(query: Int16Array) {
@@ -88,7 +154,7 @@ export const Search = {
       }
     }
 
-    for (let fine = 0; fine < CONSTANTS.FINE_COUNT; fine++) {
+    for (let fine = 0; fine < fineLimit; fine++) {
       const codeBase = fine * CONSTANTS.PQ_M
       let dist = pqLut[pqCodes[codeBase]]
 
@@ -96,29 +162,28 @@ export const Search = {
         dist += pqLut[sub * CONSTANTS.PQ_K + pqCodes[codeBase + sub]]
       }
 
-      fineAllDistances[fine] = dist
+      fineDistances[fine] = dist
+      fineOrder[fine] = fine
     }
 
-    let selected = 0
+    Search.heapBuild()
 
-    for (let fine = 0; fine < CONSTANTS.FINE_COUNT; fine++) {
-      const distance = fineAllDistances[fine]
+    for (let fine = fineLimit; fine < CONSTANTS.FINE_COUNT; fine++) {
+      const codeBase = fine * CONSTANTS.PQ_M
+      let dist = pqLut[pqCodes[codeBase]]
 
-      if (selected < fineLimit) {
-        const slot = selected
-        selected++
-        Search.insertSelectedFine(distance, fine, slot)
-        continue
+      for (let sub = 1; sub < CONSTANTS.PQ_M; sub++) {
+        dist += pqLut[sub * CONSTANTS.PQ_K + pqCodes[codeBase + sub]]
       }
 
-      if (distance >= fineDistances[fineLimit - 1]) {
-        continue
+      if (dist < fineDistances[0]) {
+        fineDistances[0] = dist
+        fineOrder[0] = fine
+        Search.heapSiftDown(fineLimit)
       }
-
-      Search.insertSelectedFine(distance, fine, fineLimit - 1)
     }
 
-    return selected
+    return fineLimit
   },
 
   bboxLowerBound(query: Int16Array, fine: number) {
