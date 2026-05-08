@@ -16,6 +16,23 @@ const topLabels = new Uint8Array(CONSTANTS.TOP_K)
 export const Search = {
   size: labels.length,
 
+  resetTop() {
+    for (let k = 0; k < CONSTANTS.TOP_K; k++) {
+      topDistances[k] = Infinity
+      topLabels[k] = 0
+    }
+  },
+
+  fraudCount() {
+    let fraudCount = 0
+
+    for (let k = 0; k < CONSTANTS.TOP_K; k++) {
+      fraudCount += topLabels[k]
+    }
+
+    return fraudCount
+  },
+
   insertSelectedFine(distance: number, fine: number, slot: number) {
     while (slot > 0 && fineDistances[slot - 1] > distance) {
       fineDistances[slot] = fineDistances[slot - 1]
@@ -118,11 +135,60 @@ export const Search = {
     }
   },
 
-  knn(query: Int16Array) {
-    for (let k = 0; k < CONSTANTS.TOP_K; k++) {
-      topDistances[k] = Infinity
-      topLabels[k] = 0
+  profile(query: Int16Array) {
+    Search.resetTop()
+
+    let bboxNs = 0
+    let scanNs = 0
+    let scannedBuckets = 0
+    let skippedBuckets = 0
+    let scannedVectors = 0
+
+    const selectStartedAt = Bun.nanoseconds()
+    const selectedBuckets = Search.selectFine(query)
+    const selectFineNs = Bun.nanoseconds() - selectStartedAt
+
+    for (let i = 0; i < selectedBuckets; i++) {
+      const fine = fineOrder[i]
+      const start = fineOffsets[fine]
+      const end = fineOffsets[fine + 1]
+
+      if (start === end) {
+        skippedBuckets++
+        continue
+      }
+
+      const bboxStartedAt = Bun.nanoseconds()
+      const lowerBound = Search.bboxLowerBound(query, fine)
+      bboxNs += Bun.nanoseconds() - bboxStartedAt
+
+      if (lowerBound >= topDistances[CONSTANTS.TOP_K - 1]) {
+        skippedBuckets++
+        continue
+      }
+
+      const scanStartedAt = Bun.nanoseconds()
+      Search.scanFine(query, start, end)
+      scanNs += Bun.nanoseconds() - scanStartedAt
+
+      scannedBuckets++
+      scannedVectors += end - start
     }
+
+    return {
+      fraudCount: Search.fraudCount(),
+      selectFineNs,
+      bboxNs,
+      scanNs,
+      selectedBuckets,
+      scannedBuckets,
+      skippedBuckets,
+      scannedVectors,
+    }
+  },
+
+  knn(query: Int16Array) {
+    Search.resetTop()
 
     const selected = Search.selectFine(query)
 
@@ -142,12 +208,6 @@ export const Search = {
       Search.scanFine(query, start, end)
     }
 
-    let fraudCount = 0
-
-    for (let k = 0; k < CONSTANTS.TOP_K; k++) {
-      fraudCount += topLabels[k]
-    }
-
-    return fraudCount
+    return Search.fraudCount()
   },
 }
