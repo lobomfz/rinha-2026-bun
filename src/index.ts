@@ -12,6 +12,8 @@ const responses = [
   Response.json({ approved: false, fraud_score: 1 }),
 ]
 
+Search.warmup(CONSTANTS.WARMUP)
+
 const server = Bun.serve({
   port: CONSTANTS.PORT,
   routes: {

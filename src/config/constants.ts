@@ -7,6 +7,7 @@ export const CONSTANTS = {
   KMEANS_SAMPLE: 50_000,
   SCALE: 10000,
   PORT: 9999,
+  WARMUP: 2000,
   DATA_DIR: 'out',
 }
 

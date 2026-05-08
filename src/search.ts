@@ -17,6 +17,27 @@ const topLabels = new Uint8Array(CONSTANTS.TOP_K)
 export const Search = {
   size: labels.length,
 
+  warmup(iterations: number) {
+    if (iterations <= 0) {
+      return
+    }
+
+    const totalVectors = vectors.length / CONSTANTS.DIMS
+
+    const stride = Math.max(1, Math.floor(totalVectors / iterations))
+
+    for (let i = 0; i < iterations; i++) {
+      const idx = (i * stride) % totalVectors
+
+      Search.knn(
+        vectors.subarray(
+          idx * CONSTANTS.DIMS,
+          idx * CONSTANTS.DIMS + CONSTANTS.DIMS
+        )
+      )
+    }
+  },
+
   resetTop() {
     for (let k = 0; k < CONSTANTS.TOP_K; k++) {
       topDistances[k] = Infinity
