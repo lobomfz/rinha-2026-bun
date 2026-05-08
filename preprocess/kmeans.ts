@@ -2,27 +2,111 @@ import { CONSTANTS } from '@Config/constants'
 
 const KMEANS_ITERS = 8
 const KMEANS_SAMPLE = 50_000
+const N_WORKERS = navigator.hardwareConcurrency || 4
 
 const sampleIndexes = new Uint32Array(KMEANS_SAMPLE)
 
-export const KMeans = {
-  distance(
-    vectors: Int16Array | Float32Array,
-    vectorOffset: number,
-    centroids: Float32Array,
-    centroidOffset: number
-  ) {
-    let distance = 0
+const workers: Worker[] = []
 
-    for (let dim = 0; dim < CONSTANTS.DIMS; dim++) {
-      const diff = vectors[vectorOffset + dim] - centroids[centroidOffset + dim]
+for (let i = 0; i < N_WORKERS; i++) {
+  workers.push(new Worker(new URL('./worker.ts', import.meta.url).href))
+}
 
-      distance += diff * diff
+function toSharedInt16(arr: Int16Array): Int16Array {
+  const sab = new SharedArrayBuffer(arr.byteLength)
+  const shared = new Int16Array(sab)
+  shared.set(arr)
+  return shared
+}
+
+function toSharedFloat32(arr: Float32Array): Float32Array {
+  const sab = new SharedArrayBuffer(arr.byteLength)
+  const shared = new Float32Array(sab)
+  shared.set(arr)
+  return shared
+}
+
+function dispatchAssign(
+  centroids: Float32Array,
+  vectors: Int16Array,
+  totalSize: number,
+  k: number
+) {
+  const chunkSize = Math.ceil(totalSize / N_WORKERS)
+  const promises: Promise<{ partial: Uint16Array; chunkStart: number }>[] = []
+
+  for (let w = 0; w < N_WORKERS; w++) {
+    const start = w * chunkSize
+    const end = Math.min(start + chunkSize, totalSize)
+
+    if (start >= end) {
+      continue
     }
 
-    return distance
-  },
+    const worker = workers[w]
 
+    promises.push(
+      new Promise((resolve) => {
+        worker.onmessage = (event: MessageEvent<{ assignments: Uint16Array }>) => {
+          resolve({ partial: event.data.assignments, chunkStart: start })
+        }
+        worker.postMessage({
+          type: 'assign',
+          centroids,
+          vectors,
+          start,
+          end,
+          k,
+        })
+      })
+    )
+  }
+
+  return Promise.all(promises)
+}
+
+function dispatchTrainStep(
+  centroids: Float32Array,
+  sample: Float32Array,
+  sampleSize: number,
+  k: number
+) {
+  const chunkSize = Math.ceil(sampleSize / N_WORKERS)
+  const promises: Promise<{ sums: Float64Array; counts: Uint32Array }>[] = []
+
+  for (let w = 0; w < N_WORKERS; w++) {
+    const start = w * chunkSize
+    const end = Math.min(start + chunkSize, sampleSize)
+
+    if (start >= end) {
+      continue
+    }
+
+    const worker = workers[w]
+
+    promises.push(
+      new Promise((resolve) => {
+        worker.onmessage = (
+          event: MessageEvent<{ sums: Float64Array; counts: Uint32Array }>
+        ) => {
+          resolve(event.data)
+        }
+        worker.postMessage({
+          type: 'train',
+          centroids,
+          sample,
+          start,
+          end,
+          k,
+        })
+      })
+    )
+  }
+
+  return Promise.all(promises)
+}
+
+export const KMeans = {
   fillSample(vectors: Int16Array) {
     const size = vectors.length / CONSTANTS.DIMS
     const sampleSize = Math.min(KMEANS_SAMPLE, size)
@@ -63,27 +147,32 @@ export const KMeans = {
     return centroids
   },
 
-  train(vectors: Int16Array) {
-    const sample = KMeans.fillSample(vectors)
+  async train(vectors: Int16Array) {
+    const localSample = KMeans.fillSample(vectors)
+    const sample = toSharedFloat32(localSample)
     const sampleSize = sample.length / CONSTANTS.DIMS
-    const centroids = KMeans.seed(sample, sampleSize)
+    const centroids = toSharedFloat32(KMeans.seed(localSample, sampleSize))
 
     const sums = new Float64Array(CONSTANTS.FINE_COUNT * CONSTANTS.DIMS)
     const counts = new Uint32Array(CONSTANTS.FINE_COUNT)
 
     for (let iter = 0; iter < KMEANS_ITERS; iter++) {
+      const partials = await dispatchTrainStep(
+        centroids,
+        sample,
+        sampleSize,
+        CONSTANTS.FINE_COUNT
+      )
+
       sums.fill(0)
       counts.fill(0)
 
-      for (let i = 0; i < sampleSize; i++) {
-        const src = i * CONSTANTS.DIMS
-        const fine = KMeans.nearest(sample, src, centroids)
-        const dst = fine * CONSTANTS.DIMS
-
-        counts[fine]++
-
-        for (let dim = 0; dim < CONSTANTS.DIMS; dim++) {
-          sums[dst + dim] += sample[src + dim]
+      for (const partial of partials) {
+        for (let i = 0; i < sums.length; i++) {
+          sums[i] += partial.sums[i]
+        }
+        for (let i = 0; i < counts.length; i++) {
+          counts[i] += partial.counts[i]
         }
       }
 
@@ -110,45 +199,28 @@ export const KMeans = {
     return centroids
   },
 
-  nearest(
-    vectors: Int16Array | Float32Array,
-    offset: number,
-    centroids: Float32Array
-  ) {
-    let best = 0
-    let bestDistance = Infinity
-
-    for (let fine = 0; fine < CONSTANTS.FINE_COUNT; fine++) {
-      const centroidOffset = fine * CONSTANTS.DIMS
-      let distance = 0
-
-      for (let dim = 0; dim < CONSTANTS.DIMS; dim++) {
-        const diff = vectors[offset + dim] - centroids[centroidOffset + dim]
-
-        distance += diff * diff
-
-        if (distance >= bestDistance) {
-          break
-        }
-      }
-
-      if (distance < bestDistance) {
-        bestDistance = distance
-        best = fine
-      }
-    }
-
-    return best
-  },
-
-  assign(vectors: Int16Array, centroids: Float32Array) {
+  async assign(vectors: Int16Array, centroids: Float32Array) {
     const size = vectors.length / CONSTANTS.DIMS
+    const shared = toSharedInt16(vectors)
+    const partials = await dispatchAssign(
+      centroids,
+      shared,
+      size,
+      CONSTANTS.FINE_COUNT
+    )
+
     const assignments = new Uint16Array(size)
 
-    for (let i = 0; i < size; i++) {
-      assignments[i] = KMeans.nearest(vectors, i * CONSTANTS.DIMS, centroids)
+    for (const { partial, chunkStart } of partials) {
+      assignments.set(partial, chunkStart)
     }
 
     return assignments
+  },
+
+  terminate() {
+    for (const worker of workers) {
+      worker.terminate()
+    }
   },
 }

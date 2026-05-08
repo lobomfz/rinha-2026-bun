@@ -3,13 +3,13 @@ import { KMeans } from './kmeans'
 import type { FineTraining } from './types'
 
 export const PreprocessTraining = {
-  fine(vectors: Int16Array, labels: Uint8Array): FineTraining {
+  async fine(vectors: Int16Array, labels: Uint8Array): Promise<FineTraining> {
     const fineCounts = new Uint32Array(CONSTANTS.FINE_COUNT)
     const fineFraudCounts = new Uint32Array(CONSTANTS.FINE_COUNT)
     const centroidSums = new Float64Array(CONSTANTS.FINE_COUNT * CONSTANTS.DIMS)
 
-    const centroidFloats = KMeans.train(vectors)
-    const assignments = KMeans.assign(vectors, centroidFloats)
+    const centroidFloats = await KMeans.train(vectors)
+    const assignments = await KMeans.assign(vectors, centroidFloats)
 
     for (let i = 0; i < assignments.length; i++) {
       const fine = assignments[i]

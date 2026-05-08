@@ -1,5 +1,6 @@
 import { CONSTANTS } from '@Config/constants'
 import { PreprocessArtifacts } from './artifacts'
+import { KMeans } from './kmeans'
 import { PreprocessLayout } from './layout'
 import { PreprocessLoad } from './load'
 import { PreprocessTraining } from './training'
@@ -12,11 +13,13 @@ console.log(
   `loaded ${loaded.refs.length} vectors, fraud=${loaded.fraudCount}, k=${CONSTANTS.FINE_COUNT}`
 )
 
-const training = PreprocessTraining.fine(loaded.vectors, loaded.labels)
+const training = await PreprocessTraining.fine(loaded.vectors, loaded.labels)
 
 const artifacts = PreprocessLayout.fine(loaded.vectors, loaded.labels, training)
 
 await PreprocessArtifacts.write(artifacts)
+
+KMeans.terminate()
 
 const seconds = ((Bun.nanoseconds() - startedAt) / 1e9).toFixed(1)
 
