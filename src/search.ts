@@ -204,6 +204,7 @@ export const Search = {
         Math.imul(d3, d3)
 
       if (distance >= worstTop) {
+        measure.count('scanExitAtDim4')
         continue
       }
 
@@ -218,6 +219,7 @@ export const Search = {
       distance += Math.imul(diff, diff)
 
       if (distance >= worstTop) {
+        measure.count('scanExitAtDim8')
         continue
       }
 
@@ -231,6 +233,7 @@ export const Search = {
       distance += Math.imul(diff, diff)
 
       if (distance >= worstTop) {
+        measure.count('scanExitAtDim12')
         continue
       }
 
@@ -240,9 +243,11 @@ export const Search = {
       distance += Math.imul(diff, diff)
 
       if (distance >= worstTop) {
+        measure.count('scanExitAtDim14')
         continue
       }
 
+      measure.count('scanExitAtDim14')
       Search.insertTop(distance, label)
 
       worstTop = topDistances[CONSTANTS.TOP_K - 1]
@@ -274,6 +279,7 @@ export const Search = {
 
       if (minLb >= topDistances[CONSTANTS.TOP_K - 1]) {
         measure.count('skippedBuckets', selected - i)
+        measure.count('knnEarlyExits')
         break
       }
 
@@ -337,6 +343,7 @@ export const Search = {
         currentFraud - maxFutureLegits >= 3
       ) {
         measure.count('skippedBuckets', selected - i - 1)
+        measure.count('knnEarlyExits')
         break
       }
     }

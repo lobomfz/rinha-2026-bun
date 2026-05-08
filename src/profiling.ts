@@ -14,6 +14,11 @@ interface SearchProfile {
   scannedBuckets: number
   skippedBuckets: number
   scannedVectors: number
+  scanExitAtDim4: number
+  scanExitAtDim8: number
+  scanExitAtDim12: number
+  scanExitAtDim14: number
+  knnEarlyExits: number
 }
 
 type PhaseName =
@@ -30,6 +35,11 @@ type CounterName =
   | 'skippedBuckets'
   | 'scannedVectors'
   | 'fraudCount'
+  | 'scanExitAtDim4'
+  | 'scanExitAtDim8'
+  | 'scanExitAtDim12'
+  | 'scanExitAtDim14'
+  | 'knnEarlyExits'
 
 interface SlowestEntry {
   id: string
@@ -59,7 +69,11 @@ let currentId = ''
 
 const totalNsSamples = new Float64Array(SAMPLE_CAPACITY)
 const parseNsSamples = new Float64Array(SAMPLE_CAPACITY)
+const vectorizeNsSamples = new Float64Array(SAMPLE_CAPACITY)
+const quantizeNsSamples = new Float64Array(SAMPLE_CAPACITY)
 const searchNsSamples = new Float64Array(SAMPLE_CAPACITY)
+const selectFineNsSamples = new Float64Array(SAMPLE_CAPACITY)
+const lbNsSamples = new Float64Array(SAMPLE_CAPACITY)
 const scanNsSamples = new Float64Array(SAMPLE_CAPACITY)
 const scannedVectorsSamples = new Float64Array(SAMPLE_CAPACITY)
 const scannedBucketsSamples = new Float64Array(SAMPLE_CAPACITY)
@@ -70,6 +84,11 @@ let selectedBucketsSum = 0
 let scannedBucketsSum = 0
 let skippedBucketsSum = 0
 let fraudCountSum = 0
+let scanExitAtDim4Sum = 0
+let scanExitAtDim8Sum = 0
+let scanExitAtDim12Sum = 0
+let scanExitAtDim14Sum = 0
+let knnEarlyExitsSum = 0
 
 const slowest: SlowestEntry[] = []
 
@@ -153,6 +172,11 @@ function emptyProfile(): SearchProfile {
     scannedBuckets: 0,
     skippedBuckets: 0,
     scannedVectors: 0,
+    scanExitAtDim4: 0,
+    scanExitAtDim8: 0,
+    scanExitAtDim12: 0,
+    scanExitAtDim14: 0,
+    knnEarlyExits: 0,
   }
 }
 
@@ -218,41 +242,11 @@ function add(name: PhaseName, elapsedNs: number) {
 }
 
 function set(name: CounterName, value: number) {
-  switch (name) {
-    case 'selectedBuckets':
-      current.selectedBuckets = value
-      return
-    case 'scannedBuckets':
-      current.scannedBuckets = value
-      return
-    case 'skippedBuckets':
-      current.skippedBuckets = value
-      return
-    case 'scannedVectors':
-      current.scannedVectors = value
-      return
-    case 'fraudCount':
-      current.fraudCount = value
-  }
+  current[name] = value
 }
 
 function addCounter(name: CounterName, value: number) {
-  switch (name) {
-    case 'selectedBuckets':
-      current.selectedBuckets += value
-      return
-    case 'scannedBuckets':
-      current.scannedBuckets += value
-      return
-    case 'skippedBuckets':
-      current.skippedBuckets += value
-      return
-    case 'scannedVectors':
-      current.scannedVectors += value
-      return
-    case 'fraudCount':
-      current.fraudCount += value
-  }
+  current[name] += value
 }
 
 function finish() {
@@ -265,7 +259,11 @@ function aggregate(id: string, profile: SearchProfile) {
   if (sampleCount < SAMPLE_CAPACITY) {
     totalNsSamples[sampleCount] = profile.totalNs
     parseNsSamples[sampleCount] = profile.parseNs
+    vectorizeNsSamples[sampleCount] = profile.vectorizeNs
+    quantizeNsSamples[sampleCount] = profile.quantizeNs
     searchNsSamples[sampleCount] = profile.searchNs
+    selectFineNsSamples[sampleCount] = profile.selectFineNs
+    lbNsSamples[sampleCount] = profile.lbNs
     scanNsSamples[sampleCount] = profile.scanNs
     scannedVectorsSamples[sampleCount] = profile.scannedVectors
     scannedBucketsSamples[sampleCount] = profile.scannedBuckets
@@ -280,6 +278,11 @@ function aggregate(id: string, profile: SearchProfile) {
   scannedBucketsSum += profile.scannedBuckets
   skippedBucketsSum += profile.skippedBuckets
   fraudCountSum += profile.fraudCount
+  scanExitAtDim4Sum += profile.scanExitAtDim4
+  scanExitAtDim8Sum += profile.scanExitAtDim8
+  scanExitAtDim12Sum += profile.scanExitAtDim12
+  scanExitAtDim14Sum += profile.scanExitAtDim14
+  knnEarlyExitsSum += profile.knnEarlyExits
 
   insertSlowest(id, profile)
 }
@@ -351,6 +354,11 @@ function counterAverages() {
       scannedBuckets: 0,
       skippedBuckets: 0,
       fraudCount: 0,
+      scanExitAtDim4: 0,
+      scanExitAtDim8: 0,
+      scanExitAtDim12: 0,
+      scanExitAtDim14: 0,
+      knnEarlyExits: 0,
     }
   }
 
@@ -359,6 +367,11 @@ function counterAverages() {
     scannedBuckets: round2(scannedBucketsSum / sampleCount),
     skippedBuckets: round2(skippedBucketsSum / sampleCount),
     fraudCount: round2(fraudCountSum / sampleCount),
+    scanExitAtDim4: round2(scanExitAtDim4Sum / sampleCount),
+    scanExitAtDim8: round2(scanExitAtDim8Sum / sampleCount),
+    scanExitAtDim12: round2(scanExitAtDim12Sum / sampleCount),
+    scanExitAtDim14: round2(scanExitAtDim14Sum / sampleCount),
+    knnEarlyExits: round2(knnEarlyExitsSum / sampleCount),
   }
 }
 
@@ -373,7 +386,11 @@ function emit() {
       phases: {
         totalNs: summarize(totalNsSamples, sampleCount),
         parseNs: summarize(parseNsSamples, sampleCount),
+        vectorizeNs: summarize(vectorizeNsSamples, sampleCount),
+        quantizeNs: summarize(quantizeNsSamples, sampleCount),
         searchNs: summarize(searchNsSamples, sampleCount),
+        selectFineNs: summarize(selectFineNsSamples, sampleCount),
+        lbNs: summarize(lbNsSamples, sampleCount),
         scanNs: summarize(scanNsSamples, sampleCount),
         scannedVectors: summarize(scannedVectorsSamples, sampleCount),
         scannedBuckets: summarize(scannedBucketsSamples, sampleCount),
