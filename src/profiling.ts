@@ -1,57 +1,30 @@
 import { readFileSync } from 'node:fs'
 
-interface SearchProfile {
-  fraudCount: number
-  totalNs: number
-  parseNs: number
-  vectorizeNs: number
-  quantizeNs: number
-  searchNs: number
-  selectFineNs: number
-  lbNs: number
-  scanNs: number
-  selectedBuckets: number
-  scannedBuckets: number
-  skippedBuckets: number
-  scannedVectors: number
-  scanExitAtDim4: number
-  scanExitAtDim8: number
-  scanExitAtDim12: number
-  scanExitAtDim14: number
-  knnEarlyExits: number
-}
+const PHASES = [
+  'parse',
+  'vectorize',
+  'quantize',
+  'search',
+  'selectFine',
+  'lb',
+  'scan',
+] as const
 
-type PhaseName =
-  | 'parse'
-  | 'vectorize'
-  | 'quantize'
-  | 'search'
-  | 'selectFine'
-  | 'lb'
-  | 'scan'
-type CounterName =
-  | 'selectedBuckets'
-  | 'scannedBuckets'
-  | 'skippedBuckets'
-  | 'scannedVectors'
-  | 'fraudCount'
-  | 'scanExitAtDim4'
-  | 'scanExitAtDim8'
-  | 'scanExitAtDim12'
-  | 'scanExitAtDim14'
-  | 'knnEarlyExits'
+const COUNTERS = [
+  'selectedBuckets',
+  'scannedBuckets',
+  'skippedBuckets',
+  'scannedVectors',
+  'fraudCount',
+  'scanExitAtDim4',
+  'scanExitAtDim8',
+  'scanExitAtDim12',
+  'scanExitAtDim14',
+  'knnEarlyExits',
+] as const
 
-interface SlowestEntry {
-  id: string
-  totalNs: number
-  parseNs: number
-  searchNs: number
-  selectFineNs: number
-  lbNs: number
-  scanNs: number
-  scannedBuckets: number
-  scannedVectors: number
-}
+type Phase = (typeof PHASES)[number]
+type Counter = (typeof COUNTERS)[number]
 
 interface CgroupStat {
   nr_periods: number
@@ -62,35 +35,25 @@ interface CgroupStat {
 const SAMPLE_CAPACITY = 256_000
 const SLOWEST_CAPACITY = 20
 
-let current: SearchProfile = emptyProfile()
-let last: SearchProfile = emptyProfile()
+const phaseSamples = {} as Record<Phase, Float64Array>
+const counterSamples = {} as Record<Counter, Float64Array>
+const totalNsSamples = new Float64Array(SAMPLE_CAPACITY)
+const counterSums = {} as Record<Counter, number>
+
+for (const p of PHASES) {
+  phaseSamples[p] = new Float64Array(SAMPLE_CAPACITY)
+}
+
+for (const c of COUNTERS) {
+  counterSamples[c] = new Float64Array(SAMPLE_CAPACITY)
+  counterSums[c] = 0
+}
+
+let sampleCount = 0
 let startedAt = 0
 let currentId = ''
 
-const totalNsSamples = new Float64Array(SAMPLE_CAPACITY)
-const parseNsSamples = new Float64Array(SAMPLE_CAPACITY)
-const vectorizeNsSamples = new Float64Array(SAMPLE_CAPACITY)
-const quantizeNsSamples = new Float64Array(SAMPLE_CAPACITY)
-const searchNsSamples = new Float64Array(SAMPLE_CAPACITY)
-const selectFineNsSamples = new Float64Array(SAMPLE_CAPACITY)
-const lbNsSamples = new Float64Array(SAMPLE_CAPACITY)
-const scanNsSamples = new Float64Array(SAMPLE_CAPACITY)
-const scannedVectorsSamples = new Float64Array(SAMPLE_CAPACITY)
-const scannedBucketsSamples = new Float64Array(SAMPLE_CAPACITY)
-const vectorsPerBucketSamples = new Float64Array(SAMPLE_CAPACITY)
-let sampleCount = 0
-
-let selectedBucketsSum = 0
-let scannedBucketsSum = 0
-let skippedBucketsSum = 0
-let fraudCountSum = 0
-let scanExitAtDim4Sum = 0
-let scanExitAtDim8Sum = 0
-let scanExitAtDim12Sum = 0
-let scanExitAtDim14Sum = 0
-let knnEarlyExitsSum = 0
-
-const slowest: SlowestEntry[] = []
+const slowest: { id: string; totalNs: number; row: number }[] = []
 
 function readCgroup(): CgroupStat | null {
   try {
@@ -157,39 +120,13 @@ function cgroupDelta() {
   }
 }
 
-function emptyProfile(): SearchProfile {
-  return {
-    fraudCount: 0,
-    totalNs: 0,
-    parseNs: 0,
-    vectorizeNs: 0,
-    quantizeNs: 0,
-    searchNs: 0,
-    selectFineNs: 0,
-    lbNs: 0,
-    scanNs: 0,
-    selectedBuckets: 0,
-    scannedBuckets: 0,
-    skippedBuckets: 0,
-    scannedVectors: 0,
-    scanExitAtDim4: 0,
-    scanExitAtDim8: 0,
-    scanExitAtDim12: 0,
-    scanExitAtDim14: 0,
-    knnEarlyExits: 0,
-  }
-}
-
-function runMeasure(
-  name: PhaseName,
-  fn: () => number,
-  resultName: CounterName
-): number
-function runMeasure<T>(name: PhaseName, fn: () => T): T
-function runMeasure<T>(name: PhaseName, fn: () => T, resultName?: CounterName) {
-  const startedAt = Bun.nanoseconds()
+function runMeasure(name: Phase, fn: () => number, resultName: Counter): number
+function runMeasure<T>(name: Phase, fn: () => T): T
+function runMeasure<T>(name: Phase, fn: () => T, resultName?: Counter) {
+  const start = Bun.nanoseconds()
   const result = fn()
-  add(name, Bun.nanoseconds() - startedAt)
+
+  add(name, Bun.nanoseconds() - start)
 
   if (resultName) {
     if (typeof result !== 'number') {
@@ -202,110 +139,77 @@ function runMeasure<T>(name: PhaseName, fn: () => T, resultName?: CounterName) {
   return result
 }
 
-function count(name: CounterName, value = 1) {
-  addCounter(name, value)
-}
-
 function begin(id: string) {
   currentId = id
   startedAt = Bun.nanoseconds()
-  current = emptyProfile()
+
+  if (sampleCount >= SAMPLE_CAPACITY) {
+    return
+  }
+
+  for (const p of PHASES) {
+    phaseSamples[p][sampleCount] = 0
+  }
+
+  for (const c of COUNTERS) {
+    counterSamples[c][sampleCount] = 0
+  }
 }
 
 function identify(id: string) {
   currentId = id
 }
 
-function add(name: PhaseName, elapsedNs: number) {
-  switch (name) {
-    case 'parse':
-      current.parseNs += elapsedNs
-      return
-    case 'vectorize':
-      current.vectorizeNs += elapsedNs
-      return
-    case 'quantize':
-      current.quantizeNs += elapsedNs
-      return
-    case 'search':
-      current.searchNs += elapsedNs
-      return
-    case 'selectFine':
-      current.selectFineNs += elapsedNs
-      return
-    case 'lb':
-      current.lbNs += elapsedNs
-      return
-    case 'scan':
-      current.scanNs += elapsedNs
+function add(name: Phase, elapsedNs: number) {
+  if (sampleCount >= SAMPLE_CAPACITY) {
+    return
   }
+
+  phaseSamples[name][sampleCount] += elapsedNs
 }
 
-function set(name: CounterName, value: number) {
-  current[name] = value
+function set(name: Counter, value: number) {
+  if (sampleCount >= SAMPLE_CAPACITY) {
+    return
+  }
+
+  counterSamples[name][sampleCount] = value
 }
 
-function addCounter(name: CounterName, value: number) {
-  current[name] += value
+function addCounter(name: Counter, value: number) {
+  if (sampleCount >= SAMPLE_CAPACITY) {
+    return
+  }
+
+  counterSamples[name][sampleCount] += value
+}
+
+function count(name: Counter, value = 1) {
+  addCounter(name, value)
 }
 
 function finish() {
-  current.totalNs = Bun.nanoseconds() - startedAt
-  last = { ...current }
-  aggregate(currentId, current)
-}
-
-function aggregate(id: string, profile: SearchProfile) {
-  if (sampleCount < SAMPLE_CAPACITY) {
-    totalNsSamples[sampleCount] = profile.totalNs
-    parseNsSamples[sampleCount] = profile.parseNs
-    vectorizeNsSamples[sampleCount] = profile.vectorizeNs
-    quantizeNsSamples[sampleCount] = profile.quantizeNs
-    searchNsSamples[sampleCount] = profile.searchNs
-    selectFineNsSamples[sampleCount] = profile.selectFineNs
-    lbNsSamples[sampleCount] = profile.lbNs
-    scanNsSamples[sampleCount] = profile.scanNs
-    scannedVectorsSamples[sampleCount] = profile.scannedVectors
-    scannedBucketsSamples[sampleCount] = profile.scannedBuckets
-    vectorsPerBucketSamples[sampleCount] =
-      profile.scannedBuckets > 0
-        ? profile.scannedVectors / profile.scannedBuckets
-        : 0
-    sampleCount++
+  if (sampleCount >= SAMPLE_CAPACITY) {
+    return
   }
 
-  selectedBucketsSum += profile.selectedBuckets
-  scannedBucketsSum += profile.scannedBuckets
-  skippedBucketsSum += profile.skippedBuckets
-  fraudCountSum += profile.fraudCount
-  scanExitAtDim4Sum += profile.scanExitAtDim4
-  scanExitAtDim8Sum += profile.scanExitAtDim8
-  scanExitAtDim12Sum += profile.scanExitAtDim12
-  scanExitAtDim14Sum += profile.scanExitAtDim14
-  knnEarlyExitsSum += profile.knnEarlyExits
+  const totalNs = Bun.nanoseconds() - startedAt
 
-  insertSlowest(id, profile)
-}
+  totalNsSamples[sampleCount] = totalNs
 
-function slim(id: string, profile: SearchProfile): SlowestEntry {
-  return {
-    id,
-    totalNs: profile.totalNs,
-    parseNs: profile.parseNs,
-    searchNs: profile.searchNs,
-    selectFineNs: profile.selectFineNs,
-    lbNs: profile.lbNs,
-    scanNs: profile.scanNs,
-    scannedBuckets: profile.scannedBuckets,
-    scannedVectors: profile.scannedVectors,
+  for (const c of COUNTERS) {
+    counterSums[c] += counterSamples[c][sampleCount]
   }
+
+  insertSlowest(currentId, totalNs, sampleCount)
+  sampleCount++
 }
 
-function insertSlowest(id: string, profile: SearchProfile) {
+function insertSlowest(id: string, totalNs: number, row: number) {
   if (slowest.length < SLOWEST_CAPACITY) {
-    slowest.push(slim(id, profile))
-  } else if (profile.totalNs > slowest[SLOWEST_CAPACITY - 1].totalNs) {
-    slowest[SLOWEST_CAPACITY - 1] = slim(id, profile)
+    slowest.push({ id, totalNs, row })
+  } else if (totalNs > slowest[SLOWEST_CAPACITY - 1].totalNs) {
+    slowest[SLOWEST_CAPACITY - 1] = { id, totalNs, row }
   } else {
     return
   }
@@ -321,25 +225,25 @@ function insertSlowest(id: string, profile: SearchProfile) {
   }
 }
 
-function summarize(samples: Float64Array, count: number) {
-  if (count === 0) {
+function summarize(samples: Float64Array, length: number) {
+  if (length === 0) {
     return { count: 0, mean: 0, p50: 0, p95: 0, p99: 0, max: 0 }
   }
 
-  const sorted = samples.slice(0, count).sort()
+  const sorted = samples.slice(0, length).sort()
   let sum = 0
 
-  for (let i = 0; i < count; i++) {
+  for (let i = 0; i < length; i++) {
     sum += sorted[i]
   }
 
   return {
-    count,
-    mean: Math.round(sum / count),
-    p50: sorted[Math.floor(count * 0.5)],
-    p95: sorted[Math.floor(count * 0.95)],
-    p99: sorted[Math.floor(count * 0.99)],
-    max: sorted[count - 1],
+    count: length,
+    mean: Math.round(sum / length),
+    p50: sorted[Math.floor(length * 0.5)],
+    p95: sorted[Math.floor(length * 0.95)],
+    p99: sorted[Math.floor(length * 0.99)],
+    max: sorted[length - 1],
   }
 }
 
@@ -348,57 +252,85 @@ function round2(value: number) {
 }
 
 function counterAverages() {
-  if (sampleCount === 0) {
-    return {
-      selectedBuckets: 0,
-      scannedBuckets: 0,
-      skippedBuckets: 0,
-      fraudCount: 0,
-      scanExitAtDim4: 0,
-      scanExitAtDim8: 0,
-      scanExitAtDim12: 0,
-      scanExitAtDim14: 0,
-      knnEarlyExits: 0,
-    }
+  const out: Record<string, number> = {}
+
+  for (const c of COUNTERS) {
+    out[c] = sampleCount === 0 ? 0 : round2(counterSums[c] / sampleCount)
   }
 
-  return {
-    selectedBuckets: round2(selectedBucketsSum / sampleCount),
-    scannedBuckets: round2(scannedBucketsSum / sampleCount),
-    skippedBuckets: round2(skippedBucketsSum / sampleCount),
-    fraudCount: round2(fraudCountSum / sampleCount),
-    scanExitAtDim4: round2(scanExitAtDim4Sum / sampleCount),
-    scanExitAtDim8: round2(scanExitAtDim8Sum / sampleCount),
-    scanExitAtDim12: round2(scanExitAtDim12Sum / sampleCount),
-    scanExitAtDim14: round2(scanExitAtDim14Sum / sampleCount),
-    knnEarlyExits: round2(knnEarlyExitsSum / sampleCount),
-  }
+  return out
 }
 
 function snapshot() {
-  return last
+  const row = sampleCount - 1
+  const out: Record<string, number> = {}
+
+  if (row < 0) {
+    return out
+  }
+
+  out.totalNs = totalNsSamples[row]
+
+  for (const p of PHASES) {
+    out[`${p}Ns`] = phaseSamples[p][row]
+  }
+
+  for (const c of COUNTERS) {
+    out[c] = counterSamples[c][row]
+  }
+
+  return out
+}
+
+const slowestPhases: Phase[] = ['parse', 'search', 'selectFine', 'lb', 'scan']
+
+function slowestExpanded() {
+  return slowest.map(({ id, row }) => {
+    const entry: Record<string, number | string> = {
+      id,
+      totalNs: totalNsSamples[row],
+    }
+
+    for (const p of slowestPhases) {
+      entry[`${p}Ns`] = phaseSamples[p][row]
+    }
+
+    entry.scannedBuckets = counterSamples.scannedBuckets[row]
+    entry.scannedVectors = counterSamples.scannedVectors[row]
+
+    return entry
+  })
 }
 
 function emit() {
+  const phases: Record<string, ReturnType<typeof summarize>> = {
+    totalNs: summarize(totalNsSamples, sampleCount),
+  }
+
+  for (const p of PHASES) {
+    phases[`${p}Ns`] = summarize(phaseSamples[p], sampleCount)
+  }
+
+  phases.scannedVectors = summarize(counterSamples.scannedVectors, sampleCount)
+  phases.scannedBuckets = summarize(counterSamples.scannedBuckets, sampleCount)
+
+  const vpb = new Float64Array(sampleCount)
+
+  for (let i = 0; i < sampleCount; i++) {
+    const sb = counterSamples.scannedBuckets[i]
+
+    vpb[i] = sb > 0 ? counterSamples.scannedVectors[i] / sb : 0
+  }
+
+  phases.vectorsPerBucket = summarize(vpb, sampleCount)
+
   console.log(
     `__profile__ ${JSON.stringify({
       requests: sampleCount,
-      phases: {
-        totalNs: summarize(totalNsSamples, sampleCount),
-        parseNs: summarize(parseNsSamples, sampleCount),
-        vectorizeNs: summarize(vectorizeNsSamples, sampleCount),
-        quantizeNs: summarize(quantizeNsSamples, sampleCount),
-        searchNs: summarize(searchNsSamples, sampleCount),
-        selectFineNs: summarize(selectFineNsSamples, sampleCount),
-        lbNs: summarize(lbNsSamples, sampleCount),
-        scanNs: summarize(scanNsSamples, sampleCount),
-        scannedVectors: summarize(scannedVectorsSamples, sampleCount),
-        scannedBuckets: summarize(scannedBucketsSamples, sampleCount),
-        vectorsPerBucket: summarize(vectorsPerBucketSamples, sampleCount),
-      },
+      phases,
       counters: counterAverages(),
       cgroup: cgroupDelta(),
-      slowest,
+      slowest: slowestExpanded(),
     })}`
   )
 }
