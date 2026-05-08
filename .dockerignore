@@ -1,0 +1,10 @@
+.git
+node_modules
+data
+bench
+scripts
+ignored
+*.md
+.oxfmtrc.json
+.oxlintrc.json
+knip.json
