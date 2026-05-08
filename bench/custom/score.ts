@@ -1,40 +1,69 @@
-import fixtures from '../../data/test-data.json'
+import { rm } from 'node:fs/promises'
 import { BenchDocker } from '../docker'
-import { K6 } from '../k6'
 import { ScoreSummary } from './summary'
+
+const resultPath = `/tmp/rinha-v2-score-${process.pid}.json`
 
 await BenchDocker.up()
 
 try {
   await BenchDocker.waitUntilReady()
 
-  const k6 = await K6.run({
-    name: 'score',
-    script: 'bench/custom/test.js',
-    resultsDir: 'bench/custom/results',
-  })
+  const exitCode = await Bun.spawn(
+    [
+      'k6',
+      'run',
+      '--quiet',
+      '--summary-export',
+      resultPath,
+      'bench/custom/test.js',
+    ],
+    {
+      stdout: 'ignore',
+      stderr: 'ignore',
+    }
+  ).exited
 
-  if (!k6.wroteSummary) {
-    throw new Error('k6 did not write a summary')
-  }
+  const wroteSummary = await Bun.file(resultPath).exists()
 
-  const summary = await ScoreSummary.read(k6.resultPath)
-  const result = ScoreSummary.analyze(summary)
-
-  for (const line of ScoreSummary.format(
-    result,
-    fixtures.stats,
-    k6.resultPath
-  )) {
-    console.log(line)
-  }
-
-  if (k6.exitCode !== 0) {
-    process.exitCode = k6.exitCode
-  }
-
-  if (ScoreSummary.failed(result)) {
+  if (!wroteSummary) {
+    console.log(
+      JSON.stringify({
+        ok: false,
+        at: new Date().toISOString(),
+        error: 'k6 did not write a summary',
+        exitCode,
+      })
+    )
     process.exitCode = 1
+  } else {
+    const summary = await ScoreSummary.read(resultPath)
+    const result = ScoreSummary.analyze(summary)
+
+    await rm(resultPath, { force: true })
+
+    console.log(
+      JSON.stringify({
+        at: new Date().toISOString(),
+        p50: result.latency['p(50)'],
+        p95: result.latency['p(95)'],
+        p99: result.p99,
+        max: result.latency.max,
+        requests: result.counts.requests,
+        dropped: result.counts.droppedIterations,
+        fp: result.counts.falsePositives,
+        fn: result.counts.falseNegatives,
+        httpErrors: result.counts.httpErrors,
+        scoreMismatches: result.counts.scoreMismatches,
+        p99Score: result.p99Score,
+        detectionScore: result.detectionScore,
+        score: result.totalScore,
+      })
+    )
+
+    if (exitCode !== 0) {
+      process.exitCode = exitCode
+    }
   }
 } finally {
   await BenchDocker.down()
