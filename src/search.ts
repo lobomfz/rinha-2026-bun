@@ -3,6 +3,7 @@ import {
   fineCentroids,
   fineFraudEnd,
   fineOffsets,
+  fineRadii,
   vectors,
 } from '@Config/artifacts'
 import { CONSTANTS } from '@Config/constants'
@@ -12,7 +13,7 @@ const fineLimit = Math.min(CONSTANTS.FINE_PROBE, CONSTANTS.FINE_COUNT)
 const fineAllDistances = new Float64Array(CONSTANTS.FINE_COUNT)
 const fineDistances = new Float64Array(fineLimit)
 const fineOrder = new Uint16Array(fineLimit)
-const bboxLowerBounds = new Float64Array(fineLimit)
+const lowerBounds = new Float64Array(fineLimit)
 const topDistances = new Float64Array(CONSTANTS.TOP_K)
 const topLabels = new Uint8Array(CONSTANTS.TOP_K)
 
@@ -138,9 +139,22 @@ export const Search = {
     return distance
   },
 
-  computeBboxBounds(query: Int16Array, selected: number) {
+  computeLowerBounds(query: Int16Array, selected: number) {
     for (let i = 0; i < selected; i++) {
-      bboxLowerBounds[i] = Search.bboxLowerBound(query, fineOrder[i])
+      const fine = fineOrder[i]
+      const bbox = Search.bboxLowerBound(query, fine)
+      const centroidDist = Math.sqrt(fineDistances[i])
+      const radius = fineRadii[fine]
+
+      let radLb = 0
+
+      if (centroidDist > radius) {
+        const gap = centroidDist - radius
+
+        radLb = gap * gap
+      }
+
+      lowerBounds[i] = bbox > radLb ? bbox : radLb
     }
   },
 
@@ -244,16 +258,16 @@ export const Search = {
       'selectedBuckets'
     )
 
-    measure('bbox', () => Search.computeBboxBounds(query, selected))
+    measure('lb', () => Search.computeLowerBounds(query, selected))
 
     for (let i = 0; i < selected; i++) {
       let minIdx = i
 
-      let minLb = bboxLowerBounds[i]
+      let minLb = lowerBounds[i]
 
       for (let j = i + 1; j < selected; j++) {
-        if (bboxLowerBounds[j] < minLb) {
-          minLb = bboxLowerBounds[j]
+        if (lowerBounds[j] < minLb) {
+          minLb = lowerBounds[j]
           minIdx = j
         }
       }
@@ -264,8 +278,8 @@ export const Search = {
       }
 
       if (minIdx !== i) {
-        bboxLowerBounds[minIdx] = bboxLowerBounds[i]
-        bboxLowerBounds[i] = minLb
+        lowerBounds[minIdx] = lowerBounds[i]
+        lowerBounds[i] = minLb
 
         const tmp = fineOrder[i]
         fineOrder[i] = fineOrder[minIdx]

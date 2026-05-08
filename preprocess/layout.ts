@@ -63,12 +63,39 @@ export const PreprocessLayout = {
       }
     }
 
+    const fineRadii = new Float32Array(CONSTANTS.FINE_COUNT)
+
+    for (let fine = 0; fine < CONSTANTS.FINE_COUNT; fine++) {
+      const start = fineOffsets[fine]
+      const end = fineOffsets[fine + 1]
+      let maxDistSq = 0
+
+      for (let i = start; i < end; i++) {
+        const base = i * CONSTANTS.DIMS
+        let distSq = 0
+
+        for (let dim = 0; dim < CONSTANTS.DIMS; dim++) {
+          const c = fineCentroids[dim * CONSTANTS.FINE_COUNT + fine]
+          const diff = orderedVectors[base + dim] - c
+
+          distSq += diff * diff
+        }
+
+        if (distSq > maxDistSq) {
+          maxDistSq = distSq
+        }
+      }
+
+      fineRadii[fine] = Math.sqrt(maxDistSq)
+    }
+
     return {
       orderedVectors,
       fineCentroids,
       fineBboxes,
       fineOffsets,
       fineFraudEnd,
+      fineRadii,
     }
   },
 }

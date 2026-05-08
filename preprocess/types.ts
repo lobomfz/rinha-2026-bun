@@ -23,4 +23,5 @@ export type FineArtifacts = {
   fineBboxes: Int16Array
   fineOffsets: Uint32Array
   fineFraudEnd: Uint32Array
+  fineRadii: Float32Array
 }

@@ -8,7 +8,7 @@ interface SearchProfile {
   quantizeNs: number
   searchNs: number
   selectFineNs: number
-  bboxNs: number
+  lbNs: number
   scanNs: number
   selectedBuckets: number
   scannedBuckets: number
@@ -22,7 +22,7 @@ type PhaseName =
   | 'quantize'
   | 'search'
   | 'selectFine'
-  | 'bbox'
+  | 'lb'
   | 'scan'
 type CounterName =
   | 'selectedBuckets'
@@ -37,7 +37,7 @@ interface SlowestEntry {
   parseNs: number
   searchNs: number
   selectFineNs: number
-  bboxNs: number
+  lbNs: number
   scanNs: number
   scannedBuckets: number
   scannedVectors: number
@@ -147,7 +147,7 @@ function emptyProfile(): SearchProfile {
     quantizeNs: 0,
     searchNs: 0,
     selectFineNs: 0,
-    bboxNs: 0,
+    lbNs: 0,
     scanNs: 0,
     selectedBuckets: 0,
     scannedBuckets: 0,
@@ -209,8 +209,8 @@ function add(name: PhaseName, elapsedNs: number) {
     case 'selectFine':
       current.selectFineNs += elapsedNs
       return
-    case 'bbox':
-      current.bboxNs += elapsedNs
+    case 'lb':
+      current.lbNs += elapsedNs
       return
     case 'scan':
       current.scanNs += elapsedNs
@@ -291,7 +291,7 @@ function slim(id: string, profile: SearchProfile): SlowestEntry {
     parseNs: profile.parseNs,
     searchNs: profile.searchNs,
     selectFineNs: profile.selectFineNs,
-    bboxNs: profile.bboxNs,
+    lbNs: profile.lbNs,
     scanNs: profile.scanNs,
     scannedBuckets: profile.scannedBuckets,
     scannedVectors: profile.scannedVectors,

@@ -11,6 +11,7 @@ export const PreprocessArtifacts = {
     await Bun.write(`${CONSTANTS.DATA_DIR}/fine_bboxes.bin`, artifacts.fineBboxes)
     await Bun.write(`${CONSTANTS.DATA_DIR}/fine_offsets.bin`, artifacts.fineOffsets)
     await Bun.write(`${CONSTANTS.DATA_DIR}/fine_fraud_end.bin`, artifacts.fineFraudEnd)
+    await Bun.write(`${CONSTANTS.DATA_DIR}/fine_radii.bin`, artifacts.fineRadii)
     await Bun.write(
       `${CONSTANTS.DATA_DIR}/normalization.json`,
       JSON.stringify(NORMALIZATION)
