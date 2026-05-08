@@ -1,6 +1,9 @@
 import { CONSTANTS } from '@Config/constants'
 
-const sampleIndexes = new Uint32Array(CONSTANTS.KMEANS_SAMPLE)
+const KMEANS_ITERS = 8
+const KMEANS_SAMPLE = 50_000
+
+const sampleIndexes = new Uint32Array(KMEANS_SAMPLE)
 
 export const KMeans = {
   distance(
@@ -22,7 +25,7 @@ export const KMeans = {
 
   fillSample(vectors: Int16Array) {
     const size = vectors.length / CONSTANTS.DIMS
-    const sampleSize = Math.min(CONSTANTS.KMEANS_SAMPLE, size)
+    const sampleSize = Math.min(KMEANS_SAMPLE, size)
     const sample = new Float32Array(sampleSize * CONSTANTS.DIMS)
 
     let cursor = 0x9e3779b9
@@ -68,7 +71,7 @@ export const KMeans = {
     const sums = new Float64Array(CONSTANTS.FINE_COUNT * CONSTANTS.DIMS)
     const counts = new Uint32Array(CONSTANTS.FINE_COUNT)
 
-    for (let iter = 0; iter < CONSTANTS.KMEANS_ITERS; iter++) {
+    for (let iter = 0; iter < KMEANS_ITERS; iter++) {
       sums.fill(0)
       counts.fill(0)
 
