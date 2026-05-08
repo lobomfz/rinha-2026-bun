@@ -1,8 +1,8 @@
 import {
   fineBboxes,
   fineCentroids,
+  fineFraudEnd,
   fineOffsets,
-  labels,
   vectors,
 } from '@Config/artifacts'
 import { CONSTANTS } from '@Config/constants'
@@ -15,7 +15,7 @@ const topDistances = new Float64Array(CONSTANTS.TOP_K)
 const topLabels = new Uint8Array(CONSTANTS.TOP_K)
 
 export const Search = {
-  size: labels.length,
+  size: vectors.length / CONSTANTS.DIMS,
 
   warmup(iterations: number) {
     if (iterations <= 0) {
@@ -122,7 +122,7 @@ export const Search = {
     return distance
   },
 
-  scanFine(query: Int16Array, start: number, end: number) {
+  scanFine(query: Int16Array, start: number, end: number, label: number) {
     let worstTop = topDistances[CONSTANTS.TOP_K - 1]
 
     for (let i = start; i < end; i++) {
@@ -153,7 +153,7 @@ export const Search = {
       }
 
       topDistances[slot] = distance
-      topLabels[slot] = labels[i]
+      topLabels[slot] = label
       worstTop = topDistances[CONSTANTS.TOP_K - 1]
     }
   },
@@ -170,6 +170,7 @@ export const Search = {
     for (let i = 0; i < selected; i++) {
       const fine = fineOrder[i]
       const start = fineOffsets[fine]
+      const fraudEnd = fineFraudEnd[fine]
       const end = fineOffsets[fine + 1]
 
       if (start === end) {
@@ -186,7 +187,14 @@ export const Search = {
         continue
       }
 
-      measure('scan', () => Search.scanFine(query, start, end))
+      if (start < fraudEnd) {
+        measure('scan', () => Search.scanFine(query, start, fraudEnd, 1))
+      }
+
+      if (fraudEnd < end) {
+        measure('scan', () => Search.scanFine(query, fraudEnd, end, 0))
+      }
+
       measure.count('scannedBuckets')
       measure.count('scannedVectors', end - start)
     }
