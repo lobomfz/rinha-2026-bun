@@ -1,9 +1,13 @@
 import { CONSTANTS } from '@Config/constants'
 import { Search } from './search'
 import { Socket, type SocketState } from './socket'
-import { chmodSync } from 'fs'
+import { chmodSync, existsSync, unlinkSync } from 'fs'
 
 Search.warmup(CONSTANTS.WARMUP)
+
+if (existsSync(CONSTANTS.SOCK_PATH)) {
+  unlinkSync(CONSTANTS.SOCK_PATH)
+}
 
 Bun.listen<SocketState>({
   unix: CONSTANTS.SOCK_PATH,

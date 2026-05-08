@@ -30,8 +30,12 @@ export const PreprocessLayout = {
       }
     }
 
-    for (let i = 0; i < fineCentroids.length; i++) {
-      fineCentroids[i] = Math.round(training.centroidFloats[i])
+    for (let fine = 0; fine < CONSTANTS.FINE_COUNT; fine++) {
+      for (let dim = 0; dim < CONSTANTS.DIMS; dim++) {
+        fineCentroids[dim * CONSTANTS.FINE_COUNT + fine] = Math.round(
+          training.centroidFloats[fine * CONSTANTS.DIMS + dim]
+        )
+      }
     }
 
     for (let i = 0; i < labels.length; i++) {

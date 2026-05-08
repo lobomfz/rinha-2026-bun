@@ -1,11 +1,11 @@
 export const CONSTANTS = {
   DIMS: 14,
   TOP_K: 5,
-  FINE_COUNT: 2048,
-  FINE_PROBE: 128,
+  FINE_COUNT: Number(process.env.FINE_COUNT) || 2048,
+  FINE_PROBE: Number(process.env.FINE_PROBE) || 128,
   SCALE: 10000,
   PORT: 9999,
-  SOCK_PATH: process.env.SOCK_PATH || '',
+  SOCK_PATH: process.env.SOCK_PATH!,
   WARMUP: 2000,
   DATA_DIR: 'out',
 }

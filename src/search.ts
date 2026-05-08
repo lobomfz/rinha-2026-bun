@@ -9,6 +9,7 @@ import { CONSTANTS } from '@Config/constants'
 import { measure } from './profiling'
 
 const fineLimit = Math.min(CONSTANTS.FINE_PROBE, CONSTANTS.FINE_COUNT)
+const fineAllDistances = new Float64Array(CONSTANTS.FINE_COUNT)
 const fineDistances = new Float64Array(fineLimit)
 const fineOrder = new Uint16Array(fineLimit)
 const bboxLowerBounds = new Float64Array(fineLimit)
@@ -68,17 +69,31 @@ export const Search = {
   },
 
   selectFine(query: Int16Array) {
+    {
+      const qd = query[0]
+
+      for (let fine = 0; fine < CONSTANTS.FINE_COUNT; fine++) {
+        const diff = qd - fineCentroids[fine]
+
+        fineAllDistances[fine] = diff * diff
+      }
+    }
+
+    for (let dim = 1; dim < CONSTANTS.DIMS; dim++) {
+      const qd = query[dim]
+      const dimBase = dim * CONSTANTS.FINE_COUNT
+
+      for (let fine = 0; fine < CONSTANTS.FINE_COUNT; fine++) {
+        const diff = qd - fineCentroids[dimBase + fine]
+
+        fineAllDistances[fine] += diff * diff
+      }
+    }
+
     let selected = 0
 
     for (let fine = 0; fine < CONSTANTS.FINE_COUNT; fine++) {
-      const offset = fine * CONSTANTS.DIMS
-      let distance = 0
-
-      for (let dim = 0; dim < CONSTANTS.DIMS; dim++) {
-        const diff = query[dim] - fineCentroids[offset + dim]
-
-        distance += diff * diff
-      }
+      const distance = fineAllDistances[fine]
 
       if (selected < fineLimit) {
         const slot = selected

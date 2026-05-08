@@ -23,6 +23,8 @@ services:
       target: prod
     environment:
       SOCK_PATH: /sockets/api1.sock
+      FINE_COUNT: ${FINE_COUNT:-}
+      FINE_PROBE: ${FINE_PROBE:-}
     volumes:
       - sockets:/sockets
     deploy:
@@ -37,6 +39,8 @@ services:
     <<: *api
     environment:
       SOCK_PATH: /sockets/api2.sock
+      FINE_COUNT: ${FINE_COUNT:-}
+      FINE_PROBE: ${FINE_PROBE:-}
 
 volumes:
   sockets:

@@ -1,7 +1,7 @@
 import { CONSTANTS } from '@Config/constants'
 
-const KMEANS_ITERS = 8
-const KMEANS_SAMPLE = 50_000
+const KMEANS_ITERS = Number(process.env.KMEANS_ITERS) || 8
+const KMEANS_SAMPLE = Number(process.env.KMEANS_SAMPLE) || 50_000
 const N_WORKERS = navigator.hardwareConcurrency || 4
 
 const sampleIndexes = new Uint32Array(KMEANS_SAMPLE)
@@ -47,7 +47,9 @@ function dispatchAssign(
 
     promises.push(
       new Promise((resolve) => {
-        worker.onmessage = (event: MessageEvent<{ assignments: Uint16Array }>) => {
+        worker.onmessage = (
+          event: MessageEvent<{ assignments: Uint16Array }>
+        ) => {
           resolve({ partial: event.data.assignments, chunkStart: start })
         }
         worker.postMessage({
