@@ -5,6 +5,7 @@ import { Scoring } from '../src/scoring'
 
 const phaseNames = [
   'total',
+  'parse',
   'vectorize',
   'quantize',
   'search',
@@ -30,6 +31,7 @@ const entries = fixtures.entries.slice(0, limit)
 
 const phases: Record<PhaseName, number[]> = {
   total: [],
+  parse: [],
   vectorize: [],
   quantize: [],
   search: [],
@@ -74,7 +76,11 @@ function summarize(values: number[]) {
 }
 
 for (const entry of entries) {
+  measure.begin(entry.request.id)
+
   const fraudCount = Scoring.fraudCount(entry.request)
+
+  measure.finish()
 
   const profile = measure.snapshot()
 

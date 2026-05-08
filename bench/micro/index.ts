@@ -1,10 +1,10 @@
 import { CONSTANTS } from '@Config/constants'
 import { bench, run } from 'mitata'
-import fixtures from '../data/test-data.json'
-import { Scoring } from '../src/scoring'
-import { Search } from '../src/search'
-import type { Payload } from '../src/types'
-import { Vectorize } from '../src/vectorize'
+import fixtures from '../../data/test-data.json'
+import { Scoring } from '../../src/scoring'
+import { Search } from '../../src/search'
+import type { Payload } from '../../src/types'
+import { Vectorize } from '../../src/vectorize'
 
 type Entry = { request: Payload }
 type Fixtures = { entries: Entry[] }

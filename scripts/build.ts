@@ -3,11 +3,14 @@ import { mkdir } from 'node:fs/promises'
 
 const measureConst =
   /^(\s*)const\s+([A-Za-z]\w*)\s*=\s*measure\(\s*(['"])([A-Za-z]\w*)\3\s*,\s*\(\)\s*=>\s*([A-Za-z]\w*(?:\.[A-Za-z]\w*)*\([^()]*\))\s*(?:,\s*(['"])([A-Za-z]\w*)\6)?\s*\)$/gm
+const measureAwaitConst =
+  /^(\s*)const\s+([A-Za-z]\w*)\s*=\s*\(?await\s+measure\(\s*(['"])([A-Za-z]\w*)\3\s*,\s*\(\)\s*=>\s*([A-Za-z]\w*(?:\.[A-Za-z]\w*)*\([^()]*\))\s*(?:,\s*(['"])([A-Za-z]\w*)\6)?\s*\)\)?(?:\s+as\s+([A-Za-z]\w*))?$/gm
 const measureStatement =
-  /^(\s*)measure\(\s*(['"])([A-Za-z]\w*)\2\s*,\s*\(\)\s*=>\s*([A-Za-z]\w*(?:\.[A-Za-z]\w*)*\([^()]*\))\s*(?:,\s*(['"])([A-Za-z]\w*)\5)?\s*\)$/gm
+  /^(\s*)(return )?measure\(\s*(['"])([A-Za-z]\w*)\3\s*,\s*\(\)\s*=>\s*([A-Za-z]\w*(?:\.[A-Za-z]\w*)*\([^()]*\))\s*(?:,\s*(['"])([A-Za-z]\w*)\6)?\s*\)$/gm
 const measureCount =
   /^(\s*)measure\.count\(\s*(['"])([A-Za-z]\w*)\2(?:\s*,\s*([^\n)]+))?\s*\)$/gm
-const measureControl = /^\s*measure\.(?:begin|finish|set)\([^\n]*\)\n?/gm
+const measureControl =
+  /^\s*measure\.(?:begin|finish|set|add|addCounter|identify)\([^\n]*\)\n?/gm
 const measureImport = /^import \{ measure \} from ['"][^'"]*profiling['"]\n/gm
 
 function inlineMeasures(contents: string, profile: boolean) {
@@ -18,6 +21,43 @@ function inlineMeasures(contents: string, profile: boolean) {
   if (!profile) {
     transformed = transformed.replace(measureImport, '')
   }
+
+  transformed = transformed.replaceAll(
+    measureAwaitConst,
+    (
+      _match,
+      indent: string,
+      resultName: string,
+      _quote,
+      name: string,
+      expression: string,
+      _savedQuote: string | undefined,
+      savedName: string | undefined,
+      castType: string | undefined
+    ) => {
+      replacements++
+      const call = expression.replaceAll(/\s+/g, ' ')
+      const awaited = castType
+        ? `(await ${call}) as ${castType}`
+        : `await ${call}`
+
+      if (!profile) {
+        return `${indent}const ${resultName} = ${awaited}`
+      }
+
+      const lines = [
+        `${indent}const ${resultName}StartedAt = Bun.nanoseconds()`,
+        `${indent}const ${resultName} = ${awaited}`,
+        `${indent}measure.add('${name}', Bun.nanoseconds() - ${resultName}StartedAt)`,
+      ]
+
+      if (savedName) {
+        lines.push(`${indent}measure.set('${savedName}', ${resultName})`)
+      }
+
+      return lines.join('\n')
+    }
+  )
 
   transformed = transformed.replaceAll(
     measureConst,
@@ -57,6 +97,7 @@ function inlineMeasures(contents: string, profile: boolean) {
     (
       _match,
       indent: string,
+      returnPrefix: string | undefined,
       _quote,
       name: string,
       expression: string,
@@ -67,12 +108,12 @@ function inlineMeasures(contents: string, profile: boolean) {
       const call = expression.replaceAll(/\s+/g, ' ')
 
       if (!profile) {
-        return `${indent}${call}`
+        return `${indent}${returnPrefix ?? ''}${call}`
       }
 
       const lines = [`${indent}const ${name}StartedAt = Bun.nanoseconds()`]
 
-      if (savedName) {
+      if (savedName || returnPrefix) {
         lines.push(`${indent}const ${name}Result = ${call}`)
       } else {
         lines.push(`${indent}${call}`)
@@ -84,6 +125,10 @@ function inlineMeasures(contents: string, profile: boolean) {
 
       if (savedName) {
         lines.push(`${indent}measure.set('${savedName}', ${name}Result)`)
+      }
+
+      if (returnPrefix) {
+        lines.push(`${indent}return ${name}Result`)
       }
 
       return lines.join('\n')

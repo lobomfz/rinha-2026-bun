@@ -1,4 +1,5 @@
 import { CONSTANTS } from '@Config/constants'
+import { measure } from './profiling'
 import { Scoring } from './scoring'
 import { Search } from './search'
 import type { Payload } from './types'
@@ -20,9 +21,15 @@ const server = Bun.serve({
     '/ready': new Response('ok'),
     '/fraud-score': {
       async POST(req) {
-        const payload = (await req.json()) as Payload
+        measure.begin('')
+
+        const payload = (await measure('parse', () => req.json())) as Payload
+
+        measure.identify(payload.id)
 
         const fraudCount = Scoring.fraudCount(payload)
+
+        measure.finish()
 
         return responses[fraudCount]
       },

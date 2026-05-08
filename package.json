@@ -2,11 +2,7 @@
   "name": "rinha-v2",
   "private": true,
   "type": "module",
-  "scripts": {
-    "check": "lobomfz-check"
-  },
   "devDependencies": {
-    "@lobomfz/check": "^0.1.11",
     "@types/bun": "latest",
     "@typescript/native-preview": "^7.0.0-dev.20260507.1",
     "knip": "^6.12.1",

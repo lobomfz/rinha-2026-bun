@@ -15,15 +15,9 @@ export const Scoring = {
   },
 
   fraudCount(payload: Payload) {
-    measure.begin(payload.id)
-
     measure('vectorize', () => Vectorize.transform(payload, vector))
     measure('quantize', () => this.quantize(vector, query))
 
-    const fraudCount = measure('search', () => Search.knn(query), 'fraudCount')
-
-    measure.finish()
-
-    return fraudCount
+    return measure('search', () => Search.knn(query), 'fraudCount')
   },
 }
