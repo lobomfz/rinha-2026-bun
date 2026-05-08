@@ -1,9 +1,10 @@
 import {
   fineBboxes,
-  fineCentroids,
   fineFraudEnd,
   fineOffsets,
   fineRadii,
+  pqCodes,
+  pqSubCentroids,
   vectors,
 } from '@Config/artifacts'
 import { CONSTANTS } from '@Config/constants'
@@ -16,6 +17,7 @@ const fineOrder = new Uint16Array(fineLimit)
 const lowerBounds = new Float64Array(fineLimit)
 const topDistances = new Float64Array(CONSTANTS.TOP_K)
 const topLabels = new Uint8Array(CONSTANTS.TOP_K)
+const pqLut = new Float64Array(CONSTANTS.PQ_M * CONSTANTS.PQ_K)
 
 export const Search = {
   size: vectors.length / CONSTANTS.DIMS,
@@ -70,25 +72,31 @@ export const Search = {
   },
 
   selectFine(query: Int16Array) {
-    {
-      const qd = query[0]
+    for (let sub = 0; sub < CONSTANTS.PQ_M; sub++) {
+      const subBase = sub * CONSTANTS.PQ_K * CONSTANTS.PQ_SUB_DIM
+      const lutBase = sub * CONSTANTS.PQ_K
+      const dim0 = sub * CONSTANTS.PQ_SUB_DIM
+      const q0 = query[dim0]
+      const q1 = query[dim0 + 1]
 
-      for (let fine = 0; fine < CONSTANTS.FINE_COUNT; fine++) {
-        const diff = qd - fineCentroids[fine]
+      for (let code = 0; code < CONSTANTS.PQ_K; code++) {
+        const cBase = subBase + code * CONSTANTS.PQ_SUB_DIM
+        const d0 = q0 - pqSubCentroids[cBase]
+        const d1 = q1 - pqSubCentroids[cBase + 1]
 
-        fineAllDistances[fine] = diff * diff
+        pqLut[lutBase + code] = d0 * d0 + d1 * d1
       }
     }
 
-    for (let dim = 1; dim < CONSTANTS.DIMS; dim++) {
-      const qd = query[dim]
-      const dimBase = dim * CONSTANTS.FINE_COUNT
+    for (let fine = 0; fine < CONSTANTS.FINE_COUNT; fine++) {
+      const codeBase = fine * CONSTANTS.PQ_M
+      let dist = pqLut[pqCodes[codeBase]]
 
-      for (let fine = 0; fine < CONSTANTS.FINE_COUNT; fine++) {
-        const diff = qd - fineCentroids[dimBase + fine]
-
-        fineAllDistances[fine] += diff * diff
+      for (let sub = 1; sub < CONSTANTS.PQ_M; sub++) {
+        dist += pqLut[sub * CONSTANTS.PQ_K + pqCodes[codeBase + sub]]
       }
+
+      fineAllDistances[fine] = dist
     }
 
     let selected = 0

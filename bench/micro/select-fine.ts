@@ -1,4 +1,8 @@
-import { fineCentroids } from '@Config/artifacts'
+import {
+  fineCentroids,
+  pqCodes,
+  pqSubCentroids,
+} from '@Config/artifacts'
 import { CONSTANTS } from '@Config/constants'
 import { bench, run } from 'mitata'
 import fixtures from '../../data/test-data.json'
@@ -278,6 +282,123 @@ function selectFineSoaF32(query: Int16Array): number {
   return selected
 }
 
+const pqLut = new Float64Array(CONSTANTS.PQ_M * CONSTANTS.PQ_K)
+const fAll = new Float64Array(CONSTANTS.FINE_COUNT)
+const fDists = new Float64Array(FINE_LIMIT)
+const fOrder = new Uint16Array(FINE_LIMIT)
+
+function pqInsert(dist: number, fine: number, slot: number) {
+  while (slot > 0 && fDists[slot - 1] > dist) {
+    fDists[slot] = fDists[slot - 1]
+    fOrder[slot] = fOrder[slot - 1]
+    slot--
+  }
+
+  fDists[slot] = dist
+  fOrder[slot] = fine
+}
+
+function selectFinePq(query: Int16Array): number {
+  for (let sub = 0; sub < CONSTANTS.PQ_M; sub++) {
+    const subBase = sub * CONSTANTS.PQ_K * CONSTANTS.PQ_SUB_DIM
+    const lutBase = sub * CONSTANTS.PQ_K
+    const dim0 = sub * CONSTANTS.PQ_SUB_DIM
+    const q0 = query[dim0]
+    const q1 = query[dim0 + 1]
+
+    for (let code = 0; code < CONSTANTS.PQ_K; code++) {
+      const cBase = subBase + code * CONSTANTS.PQ_SUB_DIM
+      const d0 = q0 - pqSubCentroids[cBase]
+      const d1 = q1 - pqSubCentroids[cBase + 1]
+
+      pqLut[lutBase + code] = d0 * d0 + d1 * d1
+    }
+  }
+
+  for (let fine = 0; fine < CONSTANTS.FINE_COUNT; fine++) {
+    const codeBase = fine * CONSTANTS.PQ_M
+    let dist = pqLut[pqCodes[codeBase]]
+
+    for (let sub = 1; sub < CONSTANTS.PQ_M; sub++) {
+      dist += pqLut[sub * CONSTANTS.PQ_K + pqCodes[codeBase + sub]]
+    }
+
+    fAll[fine] = dist
+  }
+
+  let selected = 0
+
+  for (let fine = 0; fine < CONSTANTS.FINE_COUNT; fine++) {
+    const distance = fAll[fine]
+
+    if (selected < FINE_LIMIT) {
+      pqInsert(distance, fine, selected)
+      selected++
+      continue
+    }
+
+    if (distance >= fDists[FINE_LIMIT - 1]) {
+      continue
+    }
+
+    pqInsert(distance, fine, FINE_LIMIT - 1)
+  }
+
+  return selected
+}
+
+const gAll = new Float64Array(CONSTANTS.FINE_COUNT)
+
+function selectFinePqCalcOnly(query: Int16Array): number {
+  for (let sub = 0; sub < CONSTANTS.PQ_M; sub++) {
+    const subBase = sub * CONSTANTS.PQ_K * CONSTANTS.PQ_SUB_DIM
+    const lutBase = sub * CONSTANTS.PQ_K
+    const dim0 = sub * CONSTANTS.PQ_SUB_DIM
+    const q0 = query[dim0]
+    const q1 = query[dim0 + 1]
+
+    for (let code = 0; code < CONSTANTS.PQ_K; code++) {
+      const cBase = subBase + code * CONSTANTS.PQ_SUB_DIM
+      const d0 = q0 - pqSubCentroids[cBase]
+      const d1 = q1 - pqSubCentroids[cBase + 1]
+
+      pqLut[lutBase + code] = d0 * d0 + d1 * d1
+    }
+  }
+
+  for (let fine = 0; fine < CONSTANTS.FINE_COUNT; fine++) {
+    const codeBase = fine * CONSTANTS.PQ_M
+    let dist = pqLut[pqCodes[codeBase]]
+
+    for (let sub = 1; sub < CONSTANTS.PQ_M; sub++) {
+      dist += pqLut[sub * CONSTANTS.PQ_K + pqCodes[codeBase + sub]]
+    }
+
+    gAll[fine] = dist
+  }
+
+  return CONSTANTS.FINE_COUNT
+}
+
+const hAll = new Float64Array(CONSTANTS.FINE_COUNT)
+
+function selectFineSoaCalcOnly(query: Int16Array): number {
+  hAll.fill(0)
+
+  for (let dim = 0; dim < CONSTANTS.DIMS; dim++) {
+    const qd = query[dim]
+    const dimBase = dim * CONSTANTS.FINE_COUNT
+
+    for (let fine = 0; fine < CONSTANTS.FINE_COUNT; fine++) {
+      const diff = qd - fineCentroidsSoa[dimBase + fine]
+
+      hAll[fine] += diff * diff
+    }
+  }
+
+  return CONSTANTS.FINE_COUNT
+}
+
 function verify() {
   const q = queries[0]
 
@@ -318,10 +439,20 @@ function verify() {
     }
   }
 
+  const fSel = selectFinePq(q)
+  const exactSet = new Set(Array.from(cOrder.subarray(0, cSel)))
+  let pqOverlap = 0
+
+  for (let i = 0; i < fSel; i++) {
+    if (exactSet.has(fOrder[i])) {
+      pqOverlap++
+    }
+  }
+
   console.log(
     `verified: FINE_COUNT=${CONSTANTS.FINE_COUNT}, FINE_PROBE=${FINE_LIMIT}, ` +
       `selected=${aSel}, top0=${aTop[0]}, topLast=${aTop[aSel - 1]}, ` +
-      `f32Overlap=${f32Overlap}/${eSel}`
+      `f32Overlap=${f32Overlap}/${eSel}, pqOverlap=${pqOverlap}/${fSel}`
   )
 }
 
@@ -367,6 +498,30 @@ bench('soa.twopass.f32', () => {
   qi = (qi + 1) % queries.length
 
   return selectFineSoaF32(q)
+})
+
+bench('pq', () => {
+  const q = queries[qi]
+
+  qi = (qi + 1) % queries.length
+
+  return selectFinePq(q)
+})
+
+bench('pq.calcOnly', () => {
+  const q = queries[qi]
+
+  qi = (qi + 1) % queries.length
+
+  return selectFinePqCalcOnly(q)
+})
+
+bench('soa.calcOnly', () => {
+  const q = queries[qi]
+
+  qi = (qi + 1) % queries.length
+
+  return selectFineSoaCalcOnly(q)
 })
 
 await run()

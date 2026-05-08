@@ -1,4 +1,5 @@
 import { CONSTANTS } from '@Config/constants'
+import { PreprocessPq } from './pq'
 import type { FineTraining } from './types'
 
 export const PreprocessLayout = {
@@ -89,6 +90,9 @@ export const PreprocessLayout = {
       fineRadii[fine] = Math.sqrt(maxDistSq)
     }
 
+    const { subCentroids: pqSubCentroids, codes: pqCodes } =
+      PreprocessPq.train(fineCentroids)
+
     return {
       orderedVectors,
       fineCentroids,
@@ -96,6 +100,8 @@ export const PreprocessLayout = {
       fineOffsets,
       fineFraudEnd,
       fineRadii,
+      pqSubCentroids,
+      pqCodes,
     }
   },
 }

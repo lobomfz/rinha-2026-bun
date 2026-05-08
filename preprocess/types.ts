@@ -24,4 +24,6 @@ export type FineArtifacts = {
   fineOffsets: Uint32Array
   fineFraudEnd: Uint32Array
   fineRadii: Float32Array
+  pqSubCentroids: Float32Array
+  pqCodes: Uint8Array
 }

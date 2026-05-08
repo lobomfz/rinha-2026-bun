@@ -7,6 +7,8 @@ const [
   offsetsBuffer,
   fraudEndBuffer,
   radiiBuffer,
+  pqSubCentroidsBuffer,
+  pqCodesBuffer,
 ] = await Promise.all([
   Bun.file(`${CONSTANTS.DATA_DIR}/vectors.bin`).arrayBuffer(),
   Bun.file(`${CONSTANTS.DATA_DIR}/fine_centroids.bin`).arrayBuffer(),
@@ -14,6 +16,8 @@ const [
   Bun.file(`${CONSTANTS.DATA_DIR}/fine_offsets.bin`).arrayBuffer(),
   Bun.file(`${CONSTANTS.DATA_DIR}/fine_fraud_end.bin`).arrayBuffer(),
   Bun.file(`${CONSTANTS.DATA_DIR}/fine_radii.bin`).arrayBuffer(),
+  Bun.file(`${CONSTANTS.DATA_DIR}/pq_sub_centroids.bin`).arrayBuffer(),
+  Bun.file(`${CONSTANTS.DATA_DIR}/pq_codes.bin`).arrayBuffer(),
 ])
 
 export const vectors = new Int16Array(vectorsBuffer)
@@ -22,3 +26,5 @@ export const fineBboxes = new Int16Array(bboxesBuffer)
 export const fineOffsets = new Uint32Array(offsetsBuffer)
 export const fineFraudEnd = new Uint32Array(fraudEndBuffer)
 export const fineRadii = new Float32Array(radiiBuffer)
+export const pqSubCentroids = new Float32Array(pqSubCentroidsBuffer)
+export const pqCodes = new Uint8Array(pqCodesBuffer)
