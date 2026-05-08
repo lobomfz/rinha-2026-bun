@@ -15,7 +15,7 @@ export const Scoring = {
   },
 
   fraudCount(payload: Payload) {
-    measure.begin()
+    measure.begin(payload.id)
 
     measure('vectorize', () => Vectorize.transform(payload, vector))
     measure('quantize', () => this.quantize(vector, query))

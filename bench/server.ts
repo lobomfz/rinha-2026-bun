@@ -24,6 +24,13 @@ export const BenchServer = {
     })
   },
 
+  startProfile() {
+    return Bun.spawn(['./dist/server-profile'], {
+      stdout: 'pipe',
+      stderr: 'inherit',
+    })
+  },
+
   async waitUntilReady() {
     for (let attempt = 0; attempt < 120; attempt++) {
       const ready = await fetch('http://127.0.0.1:9999/ready')
@@ -42,6 +49,22 @@ export const BenchServer = {
 
   async stop(server: Bun.Subprocess) {
     server.kill()
+    await server.exited.catch(() => {})
+  },
+
+  async stopAndCollect(server: Bun.Subprocess) {
+    server.kill()
+
+    if (server.stdout instanceof ReadableStream) {
+      const text = await new Response(server.stdout).text()
+
+      for (const line of text.split('\n')) {
+        if (line.length > 0) {
+          console.log(line)
+        }
+      }
+    }
+
     await server.exited.catch(() => {})
   },
 }

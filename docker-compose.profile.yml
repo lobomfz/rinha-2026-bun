@@ -1,0 +1,7 @@
+services:
+  api1:
+    build:
+      target: profile
+  api2:
+    build:
+      target: profile

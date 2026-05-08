@@ -17,7 +17,9 @@ services:
     mem_limit: 20m
 
   api1: &api
-    build: .
+    build:
+      context: .
+      target: prod
     expose:
       - '9999'
     deploy:

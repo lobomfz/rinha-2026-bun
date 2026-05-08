@@ -4,15 +4,13 @@ import { BenchServer } from '../server'
 import { log } from './log'
 import { ScoreSummary } from './summary'
 
-type Fixtures = {
-  stats: unknown
-}
-
-const shouldLog = Bun.argv[2] === 'true'
+const args = new Set(Bun.argv.slice(2))
+const shouldLog = args.has('--log') || args.has('true')
+const profile = args.has('--profile')
 
 await BenchServer.build()
 
-const server = BenchServer.startBuilt()
+const server = profile ? BenchServer.startProfile() : BenchServer.startBuilt()
 
 try {
   await BenchServer.waitUntilReady()
@@ -32,7 +30,7 @@ try {
 
   for (const line of ScoreSummary.format(
     result,
-    (fixtures as Fixtures).stats,
+    fixtures.stats,
     k6.resultPath
   )) {
     console.log(line)
@@ -50,5 +48,9 @@ try {
     process.exitCode = 1
   }
 } finally {
-  await BenchServer.stop(server)
+  if (profile) {
+    await BenchServer.stopAndCollect(server)
+  } else {
+    await BenchServer.stop(server)
+  }
 }

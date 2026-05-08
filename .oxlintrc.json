@@ -1,7 +1,8 @@
 {
   "extends": ["./node_modules/@lobomfz/check/.oxlintrc.json"],
   "rules": {
-    "lobomfz/no-nullish-coalescing": "off"
+    "lobomfz/no-nullish-coalescing": "off",
+    "unicorn/prefer-math-trunc": "off"
   },
   "ignorePatterns": ["bench/official"],
   "overrides": [
