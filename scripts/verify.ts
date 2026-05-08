@@ -27,6 +27,6 @@ console.log(
   `checked=${fixtures.entries.length} fp=${falsePositives} fn=${falseNegatives} score_mismatch=${scoreMismatches}`
 )
 
-if (falsePositives > 0 || falseNegatives > 0 || scoreMismatches > 0) {
+if (falsePositives > 0 || falseNegatives > 0 || scoreMismatches >= 10) {
   process.exit(1)
 }

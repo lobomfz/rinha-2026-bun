@@ -306,6 +306,39 @@ export const Search = {
 
       measure.count('scannedBuckets')
       measure.count('scannedVectors', end - start)
+
+      let currentFraud = 0
+
+      for (let k = 0; k < CONSTANTS.TOP_K; k++) {
+        currentFraud += topLabels[k]
+      }
+
+      const worstTop = topDistances[CONSTANTS.TOP_K - 1]
+
+      let maxFutureFrauds = 0
+      let maxFutureLegits = 0
+
+      for (let j = i + 1; j < selected; j++) {
+        if (lowerBounds[j] >= worstTop) {
+          continue
+        }
+
+        const futureFine = fineOrder[j]
+        const futureStart = fineOffsets[futureFine]
+        const futureFraudEnd = fineFraudEnd[futureFine]
+        const futureEnd = fineOffsets[futureFine + 1]
+
+        maxFutureFrauds += futureFraudEnd - futureStart
+        maxFutureLegits += futureEnd - futureFraudEnd
+      }
+
+      if (
+        currentFraud + maxFutureFrauds < 3 ||
+        currentFraud - maxFutureLegits >= 3
+      ) {
+        measure.count('skippedBuckets', selected - i - 1)
+        break
+      }
     }
 
     return Search.fraudCount()
