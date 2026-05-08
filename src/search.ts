@@ -11,9 +11,13 @@ import { CONSTANTS } from '@Config/constants'
 import { measure } from './profiling'
 
 const fineLimit = Math.min(CONSTANTS.FINE_PROBE, CONSTANTS.FINE_COUNT)
+const fastFineLimit = Math.min(CONSTANTS.FAST_FINE_PROBE, fineLimit)
 const fineDistances = new Float64Array(fineLimit)
+const fineDistanceCache = new Float64Array(CONSTANTS.FINE_COUNT)
 const fineOrder = new Uint16Array(fineLimit)
 const lowerBounds = new Float64Array(fineLimit)
+const scannedFineMarks = new Uint32Array(CONSTANTS.FINE_COUNT)
+let scanGeneration = 0
 const topDistances = new Float64Array(CONSTANTS.TOP_K)
 const topLabels = new Uint8Array(CONSTANTS.TOP_K)
 const pqLut = new Float64Array(CONSTANTS.PQ_M * CONSTANTS.PQ_K)
@@ -97,14 +101,14 @@ export const Search = {
     }
   },
 
-  heapBuild() {
-    for (let start = (fineLimit >> 1) - 1; start >= 0; start--) {
+  heapBuild(end: number) {
+    for (let start = (end >> 1) - 1; start >= 0; start--) {
       let i = start
 
       while (true) {
         const left = 2 * i + 1
 
-        if (left >= fineLimit) {
+        if (left >= end) {
           break
         }
 
@@ -116,7 +120,7 @@ export const Search = {
 
         const right = left + 1
 
-        if (right < fineLimit && fineDistances[right] > fineDistances[largest]) {
+        if (right < end && fineDistances[right] > fineDistances[largest]) {
           largest = right
         }
 
@@ -137,7 +141,7 @@ export const Search = {
     }
   },
 
-  selectFine(query: Int16Array) {
+  selectFineLut(query: Int16Array) {
     for (let sub = 0; sub < CONSTANTS.PQ_M; sub++) {
       const subBase = sub * CONSTANTS.PQ_K * CONSTANTS.PQ_SUB_DIM
       const lutBase = sub * CONSTANTS.PQ_K
@@ -153,22 +157,28 @@ export const Search = {
         pqLut[lutBase + code] = d0 * d0 + d1 * d1
       }
     }
+  },
 
-    for (let fine = 0; fine < fineLimit; fine++) {
+  selectFineHeapInit(limit: number, cacheDistances: boolean) {
+    for (let fine = 0; fine < limit; fine++) {
       const codeBase = fine * CONSTANTS.PQ_M
       let dist = pqLut[pqCodes[codeBase]]
 
       for (let sub = 1; sub < CONSTANTS.PQ_M; sub++) {
         dist += pqLut[sub * CONSTANTS.PQ_K + pqCodes[codeBase + sub]]
+      }
+
+      if (cacheDistances) {
+        fineDistanceCache[fine] = dist
       }
 
       fineDistances[fine] = dist
       fineOrder[fine] = fine
     }
+  },
 
-    Search.heapBuild()
-
-    for (let fine = fineLimit; fine < CONSTANTS.FINE_COUNT; fine++) {
+  selectFineHeapMain(limit: number, cacheDistances: boolean) {
+    for (let fine = limit; fine < CONSTANTS.FINE_COUNT; fine++) {
       const codeBase = fine * CONSTANTS.PQ_M
       let dist = pqLut[pqCodes[codeBase]]
 
@@ -176,14 +186,55 @@ export const Search = {
         dist += pqLut[sub * CONSTANTS.PQ_K + pqCodes[codeBase + sub]]
       }
 
+      if (cacheDistances) {
+        fineDistanceCache[fine] = dist
+      }
+
       if (dist < fineDistances[0]) {
         fineDistances[0] = dist
         fineOrder[0] = fine
-        Search.heapSiftDown(fineLimit)
+        Search.heapSiftDown(limit)
       }
     }
+  },
 
-    return fineLimit
+  selectFine(query: Int16Array, limit: number, buildLut: boolean) {
+    if (buildLut) {
+      measure('sfLut', () => Search.selectFineLut(query))
+    }
+
+    measure('sfInit', () => Search.selectFineHeapInit(limit, buildLut))
+    measure('sfBuild', () => Search.heapBuild(limit))
+    measure('sfMain', () => Search.selectFineHeapMain(limit, buildLut))
+
+    return limit
+  },
+
+  selectFineCachedInit(limit: number) {
+    for (let fine = 0; fine < limit; fine++) {
+      fineDistances[fine] = fineDistanceCache[fine]
+      fineOrder[fine] = fine
+    }
+  },
+
+  selectFineCachedMain(limit: number) {
+    for (let fine = limit; fine < CONSTANTS.FINE_COUNT; fine++) {
+      const dist = fineDistanceCache[fine]
+
+      if (dist < fineDistances[0]) {
+        fineDistances[0] = dist
+        fineOrder[0] = fine
+        Search.heapSiftDown(limit)
+      }
+    }
+  },
+
+  selectFineCached(limit: number) {
+    measure('sfInit', () => Search.selectFineCachedInit(limit))
+    measure('sfBuild', () => Search.heapBuild(limit))
+    measure('sfMain', () => Search.selectFineCachedMain(limit))
+
+    return limit
   },
 
   bboxLowerBound(query: Int16Array, fine: number) {
@@ -327,18 +378,15 @@ export const Search = {
     }
   },
 
-  knn(query: Int16Array) {
-    Search.resetTop()
-
-    const selected = measure(
-      'selectFine',
-      () => Search.selectFine(query),
-      'selectedBuckets'
-    )
-
-    measure('lb', () => Search.computeLowerBounds(query, selected))
-
-    for (let i = 0; i < selected; i++) {
+  scanSelected(
+    query: Int16Array,
+    selected: number,
+    from: number,
+    to: number,
+    allowClassEarlyExit: boolean,
+    scannedMark: number
+  ) {
+    for (let i = from; i < to; i++) {
       let minIdx = i
 
       let minLb = lowerBounds[i]
@@ -353,7 +401,7 @@ export const Search = {
       if (minLb >= topDistances[CONSTANTS.TOP_K - 1]) {
         measure.count('skippedBuckets', selected - i)
         measure.count('knnEarlyExits')
-        break
+        return selected
       }
 
       if (minIdx !== i) {
@@ -366,6 +414,14 @@ export const Search = {
       }
 
       const fine = fineOrder[i]
+
+      if (scannedFineMarks[fine] === scannedMark) {
+        measure.count('skippedBuckets')
+        continue
+      }
+
+      scannedFineMarks[fine] = scannedMark
+
       const start = fineOffsets[fine]
       const fraudEnd = fineFraudEnd[fine]
       const end = fineOffsets[fine + 1]
@@ -386,6 +442,10 @@ export const Search = {
       measure.count('scannedBuckets')
       measure.count('scannedVectors', end - start)
 
+      if (!allowClassEarlyExit) {
+        continue
+      }
+
       let currentFraud = 0
 
       for (let k = 0; k < CONSTANTS.TOP_K; k++) {
@@ -403,6 +463,11 @@ export const Search = {
         }
 
         const futureFine = fineOrder[j]
+
+        if (scannedFineMarks[futureFine] === scannedMark) {
+          continue
+        }
+
         const futureStart = fineOffsets[futureFine]
         const futureFraudEnd = fineFraudEnd[futureFine]
         const futureEnd = fineOffsets[futureFine + 1]
@@ -417,8 +482,44 @@ export const Search = {
       ) {
         measure.count('skippedBuckets', selected - i - 1)
         measure.count('knnEarlyExits')
-        break
+        return selected
       }
+    }
+
+    return to
+  },
+
+  knn(query: Int16Array) {
+    Search.resetTop()
+    scanGeneration++
+    const scannedMark = scanGeneration
+
+    const fastSelected = measure('selectFine', () =>
+      Search.selectFine(query, fastFineLimit, true)
+    )
+
+    {
+      measure('lb', () => Search.computeLowerBounds(query, fastSelected))
+      Search.scanSelected(query, fastSelected, 0, fastSelected, true, scannedMark)
+    }
+
+    const fastFraud = Search.fraudCount()
+
+    if (fastFraud === 0 || fastFraud === 5) {
+      measure.count('selectedBuckets', fastSelected)
+      measure.count('skippedBuckets', fineLimit - fastSelected)
+      measure.count('knnEarlyExits')
+
+      return fastFraud
+    }
+
+    const selected = measure('selectFine', () => Search.selectFineCached(fineLimit))
+
+    measure.count('selectedBuckets', selected)
+
+    {
+      measure('lb', () => Search.computeLowerBounds(query, selected))
+      Search.scanSelected(query, selected, 0, selected, true, scannedMark)
     }
 
     return Search.fraudCount()

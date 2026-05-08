@@ -10,7 +10,7 @@ const measureStatement =
 const measureCount =
   /^(\s*)measure\.count\(\s*(['"])([A-Za-z]\w*)\2(?:\s*,\s*([^\n)]+))?\s*\)$/gm
 const measureControl =
-  /^\s*measure\.(?:begin|finish|set|add|addCounter|identify)\([^\n]*\)\n?/gm
+  /^\s*measure\.(?:begin|finish|set|add|addCounter|identify|markFirstByte)\([^\n]*\)\n?/gm
 const measureImport = /^import \{ measure \} from ['"][^'"]*profiling['"]\n/gm
 
 function inlineMeasures(contents: string, profile: boolean) {

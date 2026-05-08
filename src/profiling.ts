@@ -1,13 +1,19 @@
 import { readFileSync } from 'node:fs'
 
 const PHASES = [
+  'recvBuffered',
   'parse',
   'vectorize',
   'quantize',
   'search',
   'selectFine',
+  'sfLut',
+  'sfInit',
+  'sfBuild',
+  'sfMain',
   'lb',
   'scan',
+  'writeOut',
 ] as const
 
 const COUNTERS = [
@@ -38,6 +44,8 @@ const SLOWEST_CAPACITY = 20
 const phaseSamples = {} as Record<Phase, Float64Array>
 const counterSamples = {} as Record<Counter, Float64Array>
 const totalNsSamples = new Float64Array(SAMPLE_CAPACITY)
+const heapDeltaSamples = new Float64Array(SAMPLE_CAPACITY)
+const interArrivalSamples = new Float64Array(SAMPLE_CAPACITY)
 const counterSums = {} as Record<Counter, number>
 
 for (const p of PHASES) {
@@ -52,6 +60,8 @@ for (const c of COUNTERS) {
 let sampleCount = 0
 let startedAt = 0
 let currentId = ''
+let heapStart = 0
+let lastFinishedAt = 0
 
 const slowest: { id: string; totalNs: number; row: number }[] = []
 
@@ -139,21 +149,34 @@ function runMeasure<T>(name: Phase, fn: () => T, resultName?: Counter) {
   return result
 }
 
-function begin(id: string) {
+function begin(id: string, firstByteAt = 0) {
   currentId = id
-  startedAt = Bun.nanoseconds()
+  const now = Bun.nanoseconds()
 
   if (sampleCount >= SAMPLE_CAPACITY) {
+    startedAt = now
     return
   }
+
+  interArrivalSamples[sampleCount] = lastFinishedAt > 0 ? now - lastFinishedAt : 0
+  heapStart = process.memoryUsage().heapUsed
+  startedAt = now
 
   for (const p of PHASES) {
     phaseSamples[p][sampleCount] = 0
   }
 
+  if (firstByteAt > 0) {
+    phaseSamples.recvBuffered[sampleCount] = now - firstByteAt
+  }
+
   for (const c of COUNTERS) {
     counterSamples[c][sampleCount] = 0
   }
+}
+
+function markFirstByte(state: { firstByteAt: number }) {
+  state.firstByteAt = Bun.nanoseconds()
 }
 
 function identify(id: string) {
@@ -193,9 +216,12 @@ function finish() {
     return
   }
 
-  const totalNs = Bun.nanoseconds() - startedAt
+  const now = Bun.nanoseconds()
+  const totalNs = now - startedAt
 
   totalNsSamples[sampleCount] = totalNs
+  heapDeltaSamples[sampleCount] = process.memoryUsage().heapUsed - heapStart
+  lastFinishedAt = now
 
   for (const c of COUNTERS) {
     counterSums[c] += counterSamples[c][sampleCount]
@@ -282,13 +308,27 @@ function snapshot() {
   return out
 }
 
-const slowestPhases: Phase[] = ['parse', 'search', 'selectFine', 'lb', 'scan']
+const slowestPhases: Phase[] = [
+  'recvBuffered',
+  'parse',
+  'search',
+  'selectFine',
+  'sfLut',
+  'sfInit',
+  'sfBuild',
+  'sfMain',
+  'lb',
+  'scan',
+  'writeOut',
+]
 
 function slowestExpanded() {
   return slowest.map(({ id, row }) => {
     const entry: Record<string, number | string> = {
       id,
       totalNs: totalNsSamples[row],
+      heapDelta: heapDeltaSamples[row],
+      interArrivalNs: interArrivalSamples[row],
     }
 
     for (const p of slowestPhases) {
@@ -352,6 +392,7 @@ export const measure = Object.assign(runMeasure, {
   emit,
   finish,
   identify,
+  markFirstByte,
   set,
   snapshot,
 })

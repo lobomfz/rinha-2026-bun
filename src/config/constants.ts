@@ -3,6 +3,7 @@ export const CONSTANTS = {
   TOP_K: 5,
   FINE_COUNT: Number(process.env.FINE_COUNT) || 2048,
   FINE_PROBE: Number(process.env.FINE_PROBE) || 128,
+  FAST_FINE_PROBE: Number(process.env.FAST_FINE_PROBE) || 8,
   PQ_M: 7,
   PQ_K: 256,
   PQ_SUB_DIM: 2,

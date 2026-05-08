@@ -2,7 +2,7 @@ import { measure } from './profiling'
 import { Scoring } from './scoring'
 import type { Payload } from './types'
 
-export type SocketState = { buffer: Buffer }
+export type SocketState = { buffer: Buffer; firstByteAt: number }
 
 function wire(body: string): Buffer {
   return Buffer.from(
@@ -75,11 +75,15 @@ export const Socket = {
 
   handler: {
     open(socket: Bun.Socket<SocketState>) {
-      socket.data = { buffer: EMPTY }
+      socket.data = { buffer: EMPTY, firstByteAt: 0 }
     },
 
     data(socket: Bun.Socket<SocketState>, chunk: Buffer) {
       const state = socket.data
+
+      if (state.buffer.length === 0) {
+        measure.markFirstByte(state)
+      }
 
       state.buffer =
         state.buffer.length === 0 ? chunk : Buffer.concat([state.buffer, chunk])
@@ -113,7 +117,7 @@ export const Socket = {
         if (firstByte === 0x50) {
           const body = state.buffer.toString('utf8', headerEnd + 4, totalLength)
 
-          measure.begin('')
+          measure.begin('', state.firstByteAt)
 
           const payload = measure('parse', () => Socket.parsePayload(body))
 
@@ -121,9 +125,9 @@ export const Socket = {
 
           const fraudCount = Scoring.fraudCount(payload)
 
-          measure.finish()
+          measure('writeOut', () => socket.write(responses[fraudCount]))
 
-          socket.write(responses[fraudCount])
+          measure.finish()
         } else if (firstByte === 0x47) {
           socket.write(readyResponse)
         } else {
@@ -135,6 +139,7 @@ export const Socket = {
           state.buffer = EMPTY
         } else {
           state.buffer = state.buffer.subarray(totalLength)
+          measure.markFirstByte(state)
         }
       }
     },

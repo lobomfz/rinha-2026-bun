@@ -60,6 +60,13 @@ export const BenchDocker = {
     })
   },
 
+  lbLogs() {
+    return compose(['logs', '--no-color', 'lb'], {
+      profile: true,
+      capture: true,
+    })
+  },
+
   async waitUntilReady() {
     for (let attempt = 0; attempt < 120; attempt++) {
       const ready = await fetch('http://127.0.0.1:9999/ready')

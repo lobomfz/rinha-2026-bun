@@ -1,4 +1,8 @@
 services:
+  lb:
+    volumes:
+      - ./haproxy.profile.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      - sockets:/sockets
   api1:
     build:
       target: profile
