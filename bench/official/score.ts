@@ -9,7 +9,7 @@ await rm(dataLink, { force: true })
 await rm(resultPath, { force: true })
 await symlink('../../../data/test-data.json', dataLink)
 
-const server = BenchServer.start()
+const server = BenchServer.startSource()
 
 try {
   await BenchServer.waitUntilReady()

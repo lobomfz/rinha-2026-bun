@@ -1,6 +1,24 @@
 export const BenchServer = {
-  start() {
+  async build() {
+    const exitCode = await Bun.spawn(['bun', 'scripts/build.ts'], {
+      stdout: 'inherit',
+      stderr: 'inherit',
+    }).exited
+
+    if (exitCode !== 0) {
+      process.exit(exitCode)
+    }
+  },
+
+  startSource() {
     return Bun.spawn(['bun', 'src/index.ts'], {
+      stdout: 'inherit',
+      stderr: 'inherit',
+    })
+  },
+
+  startBuilt() {
+    return Bun.spawn(['./dist/server'], {
       stdout: 'inherit',
       stderr: 'inherit',
     })

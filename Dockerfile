@@ -10,7 +10,7 @@ WORKDIR /app
 RUN apt-get update \
   && apt-get install -y --no-install-recommends libstdc++6 \
   && rm -rf /var/lib/apt/lists/*
-COPY --from=builder /app/server ./server
+COPY --from=builder /app/dist/server ./server
 COPY out ./out
 EXPOSE 9999
 CMD ["./server"]

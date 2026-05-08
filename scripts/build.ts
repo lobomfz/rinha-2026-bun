@@ -1,4 +1,5 @@
 import type { BunPlugin } from 'bun'
+import { mkdir } from 'node:fs/promises'
 
 const measureConst =
   /^(\s*)const\s+([A-Za-z]\w*)\s*=\s*measure\(\s*(['"])([A-Za-z]\w*)\3\s*,\s*\(\)\s*=>\s*([A-Za-z]\w*(?:\.[A-Za-z]\w*)*\([^()]*\))\s*(?:,\s*(['"])([A-Za-z]\w*)\6)?\s*\)$/gm
@@ -178,5 +179,7 @@ async function build(profile: boolean, outfile: string) {
   process.exit(1)
 }
 
-await build(false, 'server')
-await build(true, 'server-profile')
+await mkdir('dist', { recursive: true })
+
+await build(false, 'dist/server')
+await build(true, 'dist/server-profile')

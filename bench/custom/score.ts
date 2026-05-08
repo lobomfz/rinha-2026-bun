@@ -9,7 +9,10 @@ type Fixtures = {
 }
 
 const shouldLog = Bun.argv[2] === 'true'
-const server = BenchServer.start()
+
+await BenchServer.build()
+
+const server = BenchServer.startBuilt()
 
 try {
   await BenchServer.waitUntilReady()
