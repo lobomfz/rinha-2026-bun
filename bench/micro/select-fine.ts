@@ -380,6 +380,174 @@ function selectFinePqCalcOnly(query: Int16Array): number {
   return CONSTANTS.FINE_COUNT
 }
 
+const hDists = new Float64Array(FINE_LIMIT)
+const hOrder = new Uint16Array(FINE_LIMIT)
+
+function heapSiftDown(end: number) {
+  let i = 0
+
+  while (true) {
+    const left = 2 * i + 1
+
+    if (left >= end) {
+      break
+    }
+
+    let largest = i
+
+    if (hDists[left] > hDists[largest]) {
+      largest = left
+    }
+
+    const right = left + 1
+
+    if (right < end && hDists[right] > hDists[largest]) {
+      largest = right
+    }
+
+    if (largest === i) {
+      break
+    }
+
+    const td = hDists[i]
+    hDists[i] = hDists[largest]
+    hDists[largest] = td
+
+    const to = hOrder[i]
+    hOrder[i] = hOrder[largest]
+    hOrder[largest] = to
+
+    if (largest === left) {
+      i = left
+    } else {
+      i = right
+    }
+  }
+}
+
+function heapBuild() {
+  for (let i = (FINE_LIMIT >> 1) - 1; i >= 0; i--) {
+    let cur = i
+
+    while (true) {
+      const left = 2 * cur + 1
+
+      if (left >= FINE_LIMIT) {
+        break
+      }
+
+      let largest = cur
+
+      if (hDists[left] > hDists[largest]) {
+        largest = left
+      }
+
+      const right = left + 1
+
+      if (right < FINE_LIMIT && hDists[right] > hDists[largest]) {
+        largest = right
+      }
+
+      if (largest === cur) {
+        break
+      }
+
+      const td = hDists[cur]
+      hDists[cur] = hDists[largest]
+      hDists[largest] = td
+
+      const to = hOrder[cur]
+      hOrder[cur] = hOrder[largest]
+      hOrder[largest] = to
+
+      cur = largest
+    }
+  }
+}
+
+function selectFinePqHeap(query: Int16Array): number {
+  for (let sub = 0; sub < CONSTANTS.PQ_M; sub++) {
+    const subBase = sub * CONSTANTS.PQ_K * CONSTANTS.PQ_SUB_DIM
+    const lutBase = sub * CONSTANTS.PQ_K
+    const dim0 = sub * CONSTANTS.PQ_SUB_DIM
+    const q0 = query[dim0]
+    const q1 = query[dim0 + 1]
+
+    for (let code = 0; code < CONSTANTS.PQ_K; code++) {
+      const cBase = subBase + code * CONSTANTS.PQ_SUB_DIM
+      const d0 = q0 - pqSubCentroids[cBase]
+      const d1 = q1 - pqSubCentroids[cBase + 1]
+
+      pqLut[lutBase + code] = d0 * d0 + d1 * d1
+    }
+  }
+
+  for (let fine = 0; fine < FINE_LIMIT; fine++) {
+    const codeBase = fine * CONSTANTS.PQ_M
+    let dist = pqLut[pqCodes[codeBase]]
+
+    for (let sub = 1; sub < CONSTANTS.PQ_M; sub++) {
+      dist += pqLut[sub * CONSTANTS.PQ_K + pqCodes[codeBase + sub]]
+    }
+
+    hDists[fine] = dist
+    hOrder[fine] = fine
+  }
+
+  heapBuild()
+
+  for (let fine = FINE_LIMIT; fine < CONSTANTS.FINE_COUNT; fine++) {
+    const codeBase = fine * CONSTANTS.PQ_M
+    let dist = pqLut[pqCodes[codeBase]]
+
+    for (let sub = 1; sub < CONSTANTS.PQ_M; sub++) {
+      dist += pqLut[sub * CONSTANTS.PQ_K + pqCodes[codeBase + sub]]
+    }
+
+    if (dist < hDists[0]) {
+      hDists[0] = dist
+      hOrder[0] = fine
+      heapSiftDown(FINE_LIMIT)
+    }
+  }
+
+  return FINE_LIMIT
+}
+
+function selectFineSoaHeap(query: Int16Array): number {
+  cAll.fill(0)
+
+  for (let dim = 0; dim < CONSTANTS.DIMS; dim++) {
+    const qd = query[dim]
+    const dimBase = dim * CONSTANTS.FINE_COUNT
+
+    for (let fine = 0; fine < CONSTANTS.FINE_COUNT; fine++) {
+      const diff = qd - fineCentroidsSoa[dimBase + fine]
+
+      cAll[fine] += diff * diff
+    }
+  }
+
+  for (let fine = 0; fine < FINE_LIMIT; fine++) {
+    hDists[fine] = cAll[fine]
+    hOrder[fine] = fine
+  }
+
+  heapBuild()
+
+  for (let fine = FINE_LIMIT; fine < CONSTANTS.FINE_COUNT; fine++) {
+    const dist = cAll[fine]
+
+    if (dist < hDists[0]) {
+      hDists[0] = dist
+      hOrder[0] = fine
+      heapSiftDown(FINE_LIMIT)
+    }
+  }
+
+  return FINE_LIMIT
+}
+
 const hAll = new Float64Array(CONSTANTS.FINE_COUNT)
 
 function selectFineSoaCalcOnly(query: Int16Array): number {
@@ -522,6 +690,22 @@ bench('soa.calcOnly', () => {
   qi = (qi + 1) % queries.length
 
   return selectFineSoaCalcOnly(q)
+})
+
+bench('pq.heap', () => {
+  const q = queries[qi]
+
+  qi = (qi + 1) % queries.length
+
+  return selectFinePqHeap(q)
+})
+
+bench('soa.heap', () => {
+  const q = queries[qi]
+
+  qi = (qi + 1) % queries.length
+
+  return selectFineSoaHeap(q)
 })
 
 await run()

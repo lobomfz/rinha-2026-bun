@@ -3,13 +3,13 @@ import { BenchDocker } from '../docker'
 import { K6 } from '../k6'
 import { ScoreSummary } from './summary'
 
-await BenchDocker.up()
+await BenchDocker.up({ profile: true })
 
 try {
   await BenchDocker.waitUntilReady()
 
   const k6 = await K6.run({
-    name: 'score',
+    name: 'profile',
     script: 'bench/custom/test.js',
     resultsDir: 'bench/custom/results',
   })
@@ -29,6 +29,16 @@ try {
     console.log(line)
   }
 
+  await BenchDocker.stop({ profile: true })
+
+  const logs = await BenchDocker.profileLogs()
+
+  for (const line of logs.split('\n')) {
+    if (line.includes('__profile__')) {
+      console.log(line)
+    }
+  }
+
   if (k6.exitCode !== 0) {
     process.exitCode = k6.exitCode
   }
@@ -37,5 +47,5 @@ try {
     process.exitCode = 1
   }
 } finally {
-  await BenchDocker.down()
+  await BenchDocker.down({ profile: true })
 }
