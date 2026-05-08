@@ -5,6 +5,7 @@ services:
       - '9999:9999'
     volumes:
       - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      - sockets:/sockets
     depends_on:
       - api1
       - api2
@@ -20,8 +21,10 @@ services:
     build:
       context: .
       target: prod
-    expose:
-      - '9999'
+    environment:
+      SOCK_PATH: /sockets/api1.sock
+    volumes:
+      - sockets:/sockets
     deploy:
       resources:
         limits:
@@ -32,3 +35,8 @@ services:
 
   api2:
     <<: *api
+    environment:
+      SOCK_PATH: /sockets/api2.sock
+
+volumes:
+  sockets:

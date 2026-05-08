@@ -5,6 +5,7 @@ export const CONSTANTS = {
   FINE_PROBE: 128,
   SCALE: 10000,
   PORT: 9999,
+  SOCK_PATH: process.env.SOCK_PATH || '',
   WARMUP: 2000,
   DATA_DIR: 'out',
 }
