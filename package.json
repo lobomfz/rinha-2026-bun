@@ -2,12 +2,15 @@
   "name": "rinha-v2",
   "private": true,
   "type": "module",
+  "scripts": {
+    "format:c": "clang-format -i load-balancer/*.c load-balancer/*.h"
+  },
   "devDependencies": {
     "@types/bun": "latest",
     "@typescript/native-preview": "^7.0.0-dev.20260507.1",
     "knip": "^6.12.1",
     "mitata": "^1.0.34",
-    "oxfmt": "^0.48.0",
+    "oxfmt": "^0.49.0",
     "oxlint-tsgolint": "^0.22.1"
   }
 }

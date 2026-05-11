@@ -59,58 +59,11 @@ try {
   }
 
   const lbLogs = await BenchDocker.lbLogs()
-  const lineRegex = /Tw=(-?\d+) Tc=(-?\d+) Tt=(-?\d+) ac=(\d+) fc=(\d+) bc=(\d+) sc=(\d+) be=(\S+)/
-  const sessions: { Tw: number; Tc: number; Tt: number; ac: number; bc: number; sc: number; server: string }[] = []
 
   for (const line of lbLogs.split('\n')) {
-    const match = lineRegex.exec(line)
-
-    if (!match) {
-      continue
+    if (line.includes('__profile__')) {
+      console.log(line)
     }
-
-    sessions.push({
-      Tw: Number(match[1]),
-      Tc: Number(match[2]),
-      Tt: Number(match[3]),
-      ac: Number(match[4]),
-      bc: Number(match[6]),
-      sc: Number(match[7]),
-      server: match[8],
-    })
-  }
-
-  if (sessions.length > 0) {
-    const summarize = (values: number[]) => {
-      const sorted = [...values].sort((a, b) => a - b)
-      const sum = sorted.reduce((acc, v) => acc + v, 0)
-
-      return {
-        count: sorted.length,
-        mean: Math.round(sum / sorted.length),
-        p50: sorted[Math.floor(sorted.length * 0.5)],
-        p95: sorted[Math.floor(sorted.length * 0.95)],
-        p99: sorted[Math.floor(sorted.length * 0.99)],
-        max: sorted.at(-1),
-      }
-    }
-
-    const slowest = [...sessions].sort((a, b) => b.Tt - a.Tt).slice(0, 20)
-
-    console.log(
-      `__lbprofile__ ${JSON.stringify({
-        sessions: sessions.length,
-        Tw_ms: summarize(sessions.map((s) => s.Tw)),
-        Tc_ms: summarize(sessions.map((s) => s.Tc)),
-        Tt_ms: summarize(sessions.map((s) => s.Tt)),
-        ac: summarize(sessions.map((s) => s.ac)),
-        bc: summarize(sessions.map((s) => s.bc)),
-        sc: summarize(sessions.map((s) => s.sc)),
-        slowest,
-      })}`
-    )
-  } else {
-    console.log('__lbprofile__ no_sessions_parsed')
   }
 
   if (k6.exitCode !== 0) {

@@ -1,11 +1,33 @@
 services:
   lb:
-    volumes:
-      - ./haproxy.profile.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
-      - sockets:/sockets
+    build:
+      target: profile
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: '64MB'
+    cpus: 0.50
+    mem_limit: 64m
+
   api1:
     build:
       target: profile
+    deploy:
+      resources:
+        limits:
+          cpus: '1.00'
+          memory: '220MB'
+    cpus: 1.00
+    mem_limit: 220m
+
   api2:
     build:
       target: profile
+    deploy:
+      resources:
+        limits:
+          cpus: '1.00'
+          memory: '220MB'
+    cpus: 1.00
+    mem_limit: 220m

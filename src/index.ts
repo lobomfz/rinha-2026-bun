@@ -1,9 +1,11 @@
+import { chmodSync, existsSync, unlinkSync } from 'fs'
 import { CONSTANTS } from '@Config/constants'
+import { measure } from './profiling'
 import { Search } from './search'
 import { Socket, type SocketState } from './socket'
-import { chmodSync, existsSync, unlinkSync } from 'fs'
 
 Search.warmup(CONSTANTS.WARMUP)
+measure.startEventLoopProbe()
 
 if (existsSync(CONSTANTS.SOCK_PATH)) {
   unlinkSync(CONSTANTS.SOCK_PATH)

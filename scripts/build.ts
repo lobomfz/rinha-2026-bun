@@ -10,8 +10,29 @@ const measureStatement =
 const measureCount =
   /^(\s*)measure\.count\(\s*(['"])([A-Za-z]\w*)\2(?:\s*,\s*([^\n)]+))?\s*\)$/gm
 const measureControl =
-  /^\s*measure\.(?:begin|finish|set|add|addCounter|identify|markFirstByte)\([^\n]*\)\n?/gm
+  /^\s*measure\.(?:begin|finish|set|add|addCounter|identify|markFirstByte|scanCall|setTraceId|startEventLoopProbe)\([^\n]*\)\n?/gm
 const measureImport = /^import \{ measure \} from ['"][^'"]*profiling['"]\n/gm
+
+function measureAddLines(
+  indent: string,
+  name: string,
+  startedAt: string,
+  replacementId: number
+) {
+  const elapsed = `Bun.nanoseconds() - ${startedAt}`
+
+  if (name !== 'scan') {
+    return [`${indent}measure.add('${name}', ${elapsed})`]
+  }
+
+  const elapsedName = `${name}ElapsedNs${replacementId}`
+
+  return [
+    `${indent}const ${elapsedName} = ${elapsed}`,
+    `${indent}measure.add('${name}', ${elapsedName})`,
+    `${indent}measure.scanCall(${elapsedName})`,
+  ]
+}
 
 function inlineMeasures(contents: string, profile: boolean) {
   let replacements = 0
@@ -36,19 +57,21 @@ function inlineMeasures(contents: string, profile: boolean) {
       castType: string | undefined
     ) => {
       replacements++
+      const replacementId = replacements
       const call = expression.replaceAll(/\s+/g, ' ')
       const awaited = castType
         ? `(await ${call}) as ${castType}`
         : `await ${call}`
+      const startedAt = `${resultName}StartedAt`
 
       if (!profile) {
         return `${indent}const ${resultName} = ${awaited}`
       }
 
       const lines = [
-        `${indent}const ${resultName}StartedAt = Bun.nanoseconds()`,
+        `${indent}const ${startedAt} = Bun.nanoseconds()`,
         `${indent}const ${resultName} = ${awaited}`,
-        `${indent}measure.add('${name}', Bun.nanoseconds() - ${resultName}StartedAt)`,
+        ...measureAddLines(indent, name, startedAt, replacementId),
       ]
 
       if (savedName) {
@@ -72,16 +95,18 @@ function inlineMeasures(contents: string, profile: boolean) {
       savedName: string | undefined
     ) => {
       replacements++
+      const replacementId = replacements
       const call = expression.replaceAll(/\s+/g, ' ')
+      const startedAt = `${resultName}StartedAt`
 
       if (!profile) {
         return `${indent}const ${resultName} = ${call}`
       }
 
       const lines = [
-        `${indent}const ${resultName}StartedAt = Bun.nanoseconds()`,
+        `${indent}const ${startedAt} = Bun.nanoseconds()`,
         `${indent}const ${resultName} = ${call}`,
-        `${indent}measure.add('${name}', Bun.nanoseconds() - ${resultName}StartedAt)`,
+        ...measureAddLines(indent, name, startedAt, replacementId),
       ]
 
       if (savedName) {
@@ -105,13 +130,15 @@ function inlineMeasures(contents: string, profile: boolean) {
       savedName: string | undefined
     ) => {
       replacements++
+      const replacementId = replacements
       const call = expression.replaceAll(/\s+/g, ' ')
+      const startedAt = `${name}StartedAt`
 
       if (!profile) {
         return `${indent}${returnPrefix ?? ''}${call}`
       }
 
-      const lines = [`${indent}const ${name}StartedAt = Bun.nanoseconds()`]
+      const lines = [`${indent}const ${startedAt} = Bun.nanoseconds()`]
 
       if (savedName || returnPrefix) {
         lines.push(`${indent}const ${name}Result = ${call}`)
@@ -120,7 +147,7 @@ function inlineMeasures(contents: string, profile: boolean) {
       }
 
       lines.push(
-        `${indent}measure.add('${name}', Bun.nanoseconds() - ${name}StartedAt)`
+        ...measureAddLines(indent, name, startedAt, replacementId)
       )
 
       if (savedName) {

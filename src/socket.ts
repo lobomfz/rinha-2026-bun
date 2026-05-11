@@ -117,7 +117,9 @@ export const Socket = {
         if (firstByte === 0x50) {
           const body = state.buffer.toString('utf8', headerEnd + 4, totalLength)
 
+          measure.setTraceId(state.buffer, headerEnd)
           measure.begin('', state.firstByteAt)
+          measure.set('requestBytes', bodyLength)
 
           const payload = measure('parse', () => Socket.parsePayload(body))
 

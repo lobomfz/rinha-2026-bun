@@ -400,7 +400,6 @@ export const Search = {
 
       if (minLb >= topDistances[CONSTANTS.TOP_K - 1]) {
         measure.count('skippedBuckets', selected - i)
-        measure.count('knnEarlyExits')
         return selected
       }
 
@@ -481,7 +480,6 @@ export const Search = {
         currentFraud - maxFutureLegits >= 3
       ) {
         measure.count('skippedBuckets', selected - i - 1)
-        measure.count('knnEarlyExits')
         return selected
       }
     }
@@ -500,7 +498,14 @@ export const Search = {
 
     {
       measure('lb', () => Search.computeLowerBounds(query, fastSelected))
-      Search.scanSelected(query, fastSelected, 0, fastSelected, true, scannedMark)
+      Search.scanSelected(
+        query,
+        fastSelected,
+        0,
+        fastSelected,
+        true,
+        scannedMark
+      )
     }
 
     const fastFraud = Search.fraudCount()
@@ -508,12 +513,13 @@ export const Search = {
     if (fastFraud === 0 || fastFraud === 5) {
       measure.count('selectedBuckets', fastSelected)
       measure.count('skippedBuckets', fineLimit - fastSelected)
-      measure.count('knnEarlyExits')
 
       return fastFraud
     }
 
-    const selected = measure('selectFine', () => Search.selectFineCached(fineLimit))
+    const selected = measure('selectFine', () =>
+      Search.selectFineCached(fineLimit)
+    )
 
     measure.count('selectedBuckets', selected)
 
