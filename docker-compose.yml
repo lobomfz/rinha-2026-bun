@@ -1,0 +1,40 @@
+services:
+  lb:
+    image: haproxy:3.1-alpine
+    ports:
+      - '9999:9999'
+    volumes:
+      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      - sockets:/sockets
+    depends_on:
+      - api1
+      - api2
+    deploy:
+      resources:
+        limits:
+          cpus: '0.20'
+          memory: '20MB'
+    cpus: 0.20
+    mem_limit: 20m
+
+  api1: &api
+    image: lobomfz/rinha-2026-bun-api:v0
+    environment:
+      SOCK_PATH: /sockets/api1.sock
+    volumes:
+      - sockets:/sockets
+    deploy:
+      resources:
+        limits:
+          cpus: '0.40'
+          memory: '165MB'
+    cpus: 0.40
+    mem_limit: 165m
+
+  api2:
+    <<: *api
+    environment:
+      SOCK_PATH: /sockets/api2.sock
+
+volumes:
+  sockets:
