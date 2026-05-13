@@ -1,0 +1,12 @@
+export const SAMPLE_CAPACITY = 256_000
+export const SLOWEST_CAPACITY = 256
+export const SCAN_CALL_CAPACITY = 512_000
+export const EVENT_LOOP_INTERVAL_MS = 10
+export const EVENT_LOOP_INTERVAL_NS = EVENT_LOOP_INTERVAL_MS * 1_000_000
+export const EVENT_LOOP_SAMPLE_CAPACITY = 120_000
+export const SYSTEM_SNAPSHOT_INTERVAL_MS = 1_000
+export const SYSTEM_SNAPSHOT_CAPACITY = 120
+export const PERF_SAMPLE_RATE = 64
+export const PERF_SAMPLE_CAPACITY = Math.ceil(SAMPLE_CAPACITY / PERF_SAMPLE_RATE)
+
+export const TRACE_ID = Buffer.from('X-Rinha-Trace-Id:')
