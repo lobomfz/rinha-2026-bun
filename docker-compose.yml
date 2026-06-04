@@ -1,10 +1,12 @@
 services:
   lb:
-    image: haproxy:3.1-alpine
+    image: lobomfz/rinha-2026-bun-lb:v1
     ports:
       - '9999:9999'
+    environment:
+      PORT: 9999
+      UPSTREAMS: /sockets/api1.sock,/sockets/api2.sock
     volumes:
-      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
       - sockets:/sockets
     depends_on:
       - api1
@@ -18,7 +20,7 @@ services:
     mem_limit: 20m
 
   api1: &api
-    image: lobomfz/rinha-2026-bun-api:v0
+    image: lobomfz/rinha-2026-bun-api:v1
     environment:
       SOCK_PATH: /sockets/api1.sock
     volumes:
