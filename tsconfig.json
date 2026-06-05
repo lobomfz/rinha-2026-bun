@@ -32,5 +32,5 @@
       "@Config/*": ["./src/config/*"]
     }
   },
-  "include": ["src/**/*.ts", "scripts/**/*.ts", "bench/**/*.ts", "preprocess/**/*.ts"]
+  "include": ["src/**/*.ts", "load-balancer/**/*.ts", "scripts/**/*.ts", "bench/**/*.ts", "preprocess/**/*.ts"]
 }

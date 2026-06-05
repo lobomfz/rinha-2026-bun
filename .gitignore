@@ -7,3 +7,4 @@ data/test-data.json
 bench/**/results
 bench/official/test/test-data.json
 bench/official/test/results.json
+*.local*

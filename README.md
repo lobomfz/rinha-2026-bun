@@ -9,5 +9,4 @@ detector de fraude em bun + typescript puro, sem ffi.
 - zero-alloc no hot path
 - profiling inline via codegen, zero overhead em prod
 - parser http manual sobre unix socket
-
-load balancer em C pq haproxy não dá conta, idealmente seria bun com `reuseport`
+- fork do bun com método `Bun.fd` que faz handoff de socket entre processos

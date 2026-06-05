@@ -13,6 +13,9 @@ const payload = (fixtures as Fixtures).entries[0].request
 const vector = new Float32Array(CONSTANTS.DIMS)
 const query = new Int16Array(CONSTANTS.DIMS)
 
+const fineLimit = Math.min(CONSTANTS.FINE_PROBE, CONSTANTS.FINE_COUNT)
+const fastFineLimit = Math.min(CONSTANTS.FAST_FINE_PROBE, fineLimit)
+
 Vectorize.transform(payload, vector)
 Scoring.quantize(vector, query)
 
@@ -25,7 +28,7 @@ bench('quantize', () => {
 })
 
 bench('selectFine', () => {
-  Search.selectFine(query)
+  Search.selectFine(query, fastFineLimit, true)
 })
 
 bench('bboxLowerBound', () => {

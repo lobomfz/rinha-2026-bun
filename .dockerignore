@@ -9,3 +9,8 @@ ignored
 .oxfmtrc.json
 .oxlintrc.json
 knip.json
+
+bun-custom/source/build
+bun-custom/source/target
+
+bun-custom/source/.git

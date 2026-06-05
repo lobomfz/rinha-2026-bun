@@ -1,15 +1,4 @@
 services:
-  lb:
-    build:
-      target: profile
-    deploy:
-      resources:
-        limits:
-          cpus: '0.50'
-          memory: '64MB'
-    cpus: 0.50
-    mem_limit: 64m
-
   api1:
     build:
       target: profile

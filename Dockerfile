@@ -1,4 +1,7 @@
-FROM oven/bun:1.3.13 AS builder
+ARG BUN_RUNTIME_IMAGE=bun-rinha-runtime:latest
+
+FROM ${BUN_RUNTIME_IMAGE} AS builder
+ENTRYPOINT []
 WORKDIR /app
 COPY package.json bun.lock tsconfig.json ./
 COPY src ./src

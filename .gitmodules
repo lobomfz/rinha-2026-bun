@@ -1,0 +1,4 @@
+[submodule "bun-custom/source"]
+	path = bun-custom/source
+	url = git@github.com:lobomfz/bun.git
+	branch = main

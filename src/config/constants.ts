@@ -1,18 +1,18 @@
 export const CONSTANTS = {
   DIMS: 14,
   TOP_K: 5,
-  FINE_COUNT: Number(process.env.FINE_COUNT) || 2048,
-  FINE_PROBE: Number(process.env.FINE_PROBE) || 128,
-  FAST_FINE_PROBE: Number(process.env.FAST_FINE_PROBE) || 8,
+  FINE_COUNT: 2048,
+  FINE_PROBE: 128,
+  FAST_FINE_PROBE: 8,
   PQ_M: 7,
   PQ_K: 256,
   PQ_SUB_DIM: 2,
   PQ_ITERS: 12,
   SCALE: 10000,
   PORT: 9999,
-  SOCK_PATH: process.env.SOCK_PATH!,
   WARMUP: 2000,
   DATA_DIR: 'out',
+  SOCK_PATH: process.env.SOCK_PATH!,
 }
 
 export const NORMALIZATION = {
